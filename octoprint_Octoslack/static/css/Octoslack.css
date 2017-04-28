@@ -1,0 +1,45 @@
+.octoslack_config_group {
+    border: 2px solid #a1a1a1;
+    padding: 10px 20px 10px 20px;
+    margin-right: 10px;
+    text-align: left;
+    border-radius: 25px;
+    outline-offset: 10px;
+}
+.octoprint_config_row {
+    padding-bottom: 5px;
+    vertical-align: middle;
+}
+.octoslack_label {
+    float: left;
+    width: 160px;
+    padding-right: 5px;
+    display: inline;
+}
+.octoslack_visible {
+    display: block;
+}
+.octoslack_hidden {
+    display: none;
+}
+.octoslack_valign {
+    vertical-align: middle;
+}
+.octoslack_width_auto {
+    width: auto;
+}
+.octoslack_action_label {
+    cursor: pointer;
+}
+.octoslack_select {
+    width: 150px;
+}
+.octoslack_indented {
+    margin-left: 40px;
+}
+.octoslack_small_grid_cell {
+    border: 1px solid #999;
+    padding-left: 6px;
+    padding-right: 6px;
+    text-align: center;
+}

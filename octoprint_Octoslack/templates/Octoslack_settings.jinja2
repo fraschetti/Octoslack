@@ -1,0 +1,296 @@
+<form class="form-horizontal">
+    <h2>Octoslack</h2>
+    <div class="octoslack_config_group">
+	<div class="octoprint_config_row">
+            <input type="checkbox" class="octoslack_valign" id="octoslack_include_raspi_temp" data-bind="checked: settings.plugins.Octoslack.include_raspi_temp">
+            <div class="octoslack_label octoslack_action_label" onclick="$('#octoslack_include_raspi_temp').trigger('click')">Include RasPi temp</div>
+	    <br/>
+	    <small class="muted">Include the Raspberry Pi temperature alongside printer temperatures</small>
+	</div>
+	<div class="octoprint_config_row">
+            <div class="octoslack_label">Time format</div>
+	    <select data-bind="value: settings.plugins.Octoslack.time_format" class="octoslack_select">
+                <option value="HUMAN">Human exact</option>
+                <option value="FUZZY">Human fuzzy</option>
+                <option value="EXACT">Compact exact</option>
+            </select>
+	    <br/>
+	    <p class="octoslack_indented">
+	        <small class="muted">
+	    	    <strong>Human exact</strong> - "H hours, M minutes, S seconds"
+	            <br/>
+	            <strong>Human fuzzy</strong> - "an hour"
+	            <br/>
+	            <strong>Compact exact</strong> - "HH:MM:SS"
+	        </small>
+	    </p>
+	</div>
+	<div class="octoprint_config_row">
+            <input type="checkbox" class="octoslack_valign" id="octoslack_mattermost_compatabilty_mode" onclick="Octoslack.applyMattermostChanges();" data-bind="checked: settings.plugins.Octoslack.mattermost_compatability_mode">
+            <div class="octoslack_label octoslack_action_label" onclick="$('#octoslack_mattermost_compatabilty_mode').trigger('click')">Mattermost compatability</div>
+	    <br/>
+	    <small class="muted">
+		While Mattermost provides a Slack compatible Webhook, there are a few differences that need to be accounted for. Enabling this mode will limit this config dialog to only the Mattermost compatible options and will also allow the plugin to make formatting changes as necessary.
+		<br/>
+		NOTE: Unlike Slack, Mattermost leverages Markdown for message formatting. Any message format customizations should be made using Markdown syntax
+	    </small>
+	</div>
+    </div>
+    <br/>
+    <h2>Slack configuration</h2>
+    <div class="octoslack_config_group">
+        <h3>Slack connection</h3>
+	<input type="hidden" id="octoslack_connection_method_hidden" data-bind="value: settings.plugins.Octoslack.connection_method">
+        <div>
+            <input type="radio" name="octoslack_connection_type" id="octoslack_connection_type_apitoken" onclick="Octoslack.changeConnectionType(this.value);" class="octoslack_valign" value="APITOKEN">
+            <span class="octoslack_valign octoslack_action_label" onclick="$('#octoslack_connection_type_apitoken').trigger('click')">Slack API Token</span>
+        </div>
+        <div>
+            <input type="radio" name="octoslack_connection_type" id="octoslack_connection_type_webhook" onclick="Octoslack.changeConnectionType(this.value);" class="octoslack_valign" value="WEBHOOK">
+            <span class="octoslack_valign octoslack_action_label" onclick="$('#octoslack_connection_type_webhook').trigger('click')">Slack WebHook URL</span>
+        </div>
+	<small class="muted">Most features will be available for both connection methods but some may specifically require use of the API Token</small>
+        <div id="octoslack_apitoken_group" class="octoslack_hidden">
+            <br/>
+            <div class="octoprint_config_row">
+                <span class="octoslack_label">API Token</span>
+                <input type="text" class="octoslack_width_auto" size="60" data-bind="value: settings.plugins.Octoslack.slack_apitoken_config.api_token">
+		</br>
+		<small class="muted">An API Token can be generated via your Slack team's settings dialog. Apps &amp; integrations --&gt; Manage --&gt; Custom Integrations --&gt; Bots</small>
+            </div>
+	    <div class="octoprint_config_row">
+                <input type="checkbox" class="octoslack_valign" id="octoslack_bot_commands" data-bind="checked: settings.plugins.Octoslack.slack_apitoken_config.enable_commands">
+                <div class="octoslack_label octoslack_action_label" onclick="$('#octoslack_bot_commands').trigger('click')">Listen for commands</div>
+	        <br/>
+	        <small class="muted">
+			The API Token allows for bi-directional communication between client and server meaning this plugin can receive and react to messages.
+			<br/>
+			NOTE: An OctoPrint restart is required for the plugin to start listening for commands
+			<br/>
+			NOTE: While the plugin will stop responding to commands immediate after this setting is disabled, the connection to Slack will not be torn down until OctoPrint is restarted
+			<br/>
+			When enabled, a command can be issued to the plugin via a mention.
+			<br/>
+			e.g.    @botname status
+			<br/>
+			(where @botname must match the bot name configured in Slack and as opposed to the Username configured for this plugin)
+			<br/>
+			<p class="octoslack_indented">
+				The supported commands are:
+				<br/>
+				<strong>help</strong> - Displays this list of commands
+				<br/>
+				<strong>status</strong> - Display the current print job status
+				<br/>
+				<strong>stop</strong> - Stop the current print
+				<br/>
+				<strong>pause</strong> - Pause the current print
+				<br/>
+				<strong>resume</strong> - Resume a paused print
+				<br/>
+				<strong>pause</strong> - Displays this list of commands
+			</p>
+			<br/>
+		</small>
+	    </div>
+            <div class="octoprint_config_row">
+                <span class="octoslack_label">Confirmation emoji</span>
+                <input type="text" class="octoslack_width_auto" size="15" data-bind="value: settings.plugins.Octoslack.slack_apitoken_config.commands_positive_reaction">
+                <br/>
+		<small class="muted">If commands are enabled, this emoji is added as a reaction to valid commands</small>
+            </div>
+            <div class="octoprint_config_row">
+                <span class="octoslack_label">Failure emoji</span>
+                <input type="text" class="octoslack_width_auto" size="15" data-bind="value: settings.plugins.Octoslack.slack_apitoken_config.commands_negative_reaction">
+                <br/>
+		<small class="muted">If commands are enabled, this emoji is added to invalid commands as well as valid commands that cannot be executed (e.g. <strong>pause</strong> is called on an already paused print)</small>
+            </div>
+        </div>
+        <div id="octolack_webhook_group" class="octoslack_hidden">
+            <br/>
+            <div class="octoprint_config_row">
+                <span class="octoslack_label">WebHook URL</span>
+                <input type="text" class="octoslack_width_auto" size="60" data-bind="value: settings.plugins.Octoslack.slack_webhook_config.webhook_url">
+		</br>
+		<small class="muted">A WebHook URL can be generated via your Slack team's settings dialog. Apps &amp; integrations --&gt; Manage --&gt; Custom Integrations --&gt; Incoming WebHooks</small>
+            </div>
+        </div>
+        <h3>Slack channel</h3>
+        <div class="octoprint_config_row">
+            <div class="octoslack_label">Channel</div>
+            <input type="text" size="30" id="octoslack_channel" data-bind="value: settings.plugins.Octoslack.channel">
+	    <br/>
+	    <small class="muted">Optional for WebHooks but required for when using an API Token</small>
+        </div>
+        <h3>Slack identity</h3>
+        <div class="octoprint_config_row">
+            <input type="checkbox" id="octoslack_slack_identity_check" onClick="Octoslack.toggleUseSlackIdentity(this);" class="octoslack_valign" data-bind="checked: settings.plugins.Octoslack.slack_identity.existing_user">
+            <div class="octoslack_label octoslack_action_label" onclick="$('#octoslack_slack_identity_check').trigger('click')">Use Slack identity</div>
+	    <br/>
+	    <small class="muted">When checked, Octoslack will Use the name/icon defined for the Bot/WebHook. When unchecked, a custom name and icon can be specified</small>
+        </div>
+        <div id="octoslack_custom_identity_group" class="octoslack_hidden">
+            <br/>
+            <div class="octoprint_config_row">
+                <span class="octoslack_label">Username</span>
+                <input type="text" class="octoslack_width_auto" size="25" data-bind="value: settings.plugins.Octoslack.slack_identity.username">
+                <br/>
+            </div>
+            <div class="octoprint_config_row">
+                <span class="octoslack_label">Icon emoji</span>
+                <input type="text" class="octoslack_width_auto" id="octoslack_custom_identity_icon_emoji" size="15" data-bind="value: settings.plugins.Octoslack.slack_identity.icon_emoji">
+                <br/>
+            </div>
+            <div class="octoprint_config_row">
+                <span class="octoslack_label">Icon URL</span>
+                <input type="text" class="octoslack_width_auto" size="60" data-bind="value: settings.plugins.Octoslack.slack_identity.icon_url">
+                <br/>
+            </div>
+        </div>
+    </div>
+    <br/>
+    <h2>Snapshots</h2>
+    <div class="octoslack_config_group">
+        <h3>Snapshot hosting</h3>
+	<input type="hidden" id="octoslack_upload_method_hidden" data-bind="value: settings.plugins.Octoslack.snapshot_upload_method">
+        <div>
+            <input type="radio" name="octoslackSnapshotUploadMethod" id="octoslackSnapshotUploadMethod_none"  onclick="Octoslack.changeSnapshotUploadMethod(this);" class="octoslack_valign" value="NONE">
+            <span class="octoslack_valign octoslack_action_label" onclick="$('#octoslackSnapshotUploadMethod_none').trigger('click')">None</span>
+	    <br/>
+	    <small class="muted">Unfortunately cleanly attaching images to Slack messages requires an external hosting service. If no this option is specified, snapshots will be unavailable</small>
+        </div>
+        <div>
+            <input type="radio" name="octoslackSnapshotUploadMethod" id="octoslackSnapshotUploadMethod_imgur" onclick="Octoslack.changeSnapshotUploadMethod(this);" class="octoslack_valign" value="IMGUR">
+            <span class="octoslack_valign octoslack_action_label" onclick="$('#octoslackSnapshotUploadMethod_imgur').trigger('click')">Imgur</span>
+	    <br/>
+	    <small class="muted">Leverage free Imgur hosting - sign up for an account at <a href="http://imgur.com" target="_blank">imgur.com</a></small>
+        </div>
+        <div>
+            <input type="radio" name="octoslackSnapshotUploadMethod" id="octoslackSnapshotUploadMethod_s3" onclick="Octoslack.changeSnapshotUploadMethod(this);" class="octoslack_valign" value="S3">
+            <span class="octoslack_valign octoslack_action_label" onclick="$('#octoslackSnapshotUploadMethod_s3').trigger('click')">Amazon S3</span>
+	    <br/>
+	    <small class="muted">Leverage Amazon S3 (eventually will incur a cost) at  <a href="https://aws.amazon.com/free" target="_blank">https://aws.amazon.com/free</a></small>
+        </div>
+        <div id="octoslack_imgur_group" class="octoslack_hidden">
+            <br/>
+            <div class="octoprint_config_row">
+                <span class="octoslack_label">Imgur Client ID</span>
+                <input type="text" class="octoslack_width_auto" size="20" data-bind="value: settings.plugins.Octoslack.imgur_config.client_id">
+            </div>
+            <div class="octoprint_config_row">
+                <span class="octoslack_label">Imgur Client Secret</span>
+                <input type="text" class="octoslack_width_auto" size="60" data-bind="value: settings.plugins.Octoslack.imgur_config.client_secret">
+            </div>
+	    <small class="muted">Create a Imgur application via settings --&gt; applications</small>
+        </div>
+        <div id="octolack_s3_group" class="octoslack_hidden">
+            <br/>
+            <div class="octoprint_config_row">
+                <span class="octoslack_label">AWS Access Key</span>
+                <input type="text" class="octoslack_width_auto" size="30" data-bind="value: settings.plugins.Octoslack.s3_config.AWSAccessKey">
+            </div>
+            <div class="octoprint_config_row">
+                <span class="octoslack_label">AWS Secret Key</span>
+                <input type="text" class="octoslack_width_auto" size="60" data-bind="value: settings.plugins.Octoslack.s3_config.AWSsecretKey">
+            </div>
+	    <small class="muted">AWS Access Keys can be generated via My Security Credentials --&gt; Access Keys</small>
+	    <br/>
+	    <br/>
+            <div class="octoprint_config_row">
+                <span class="octoslack_label">AWS S3 Bucket</span>
+                <input type="text" name="octoslack_imgur_clientid" id="octoslack_imgur_clientid" class="octoslack_width_auto" size="20" data-bind="value: settings.plugins.Octoslack.s3_config.s3Bucket">
+            </div>
+	    <small class="muted">The S3 bucket where snapshots should be stored</small>
+	    <br/>
+	    <br/>
+            <div class="octoprint_config_row">
+                <span class="octoslack_label">AWS S3 Retention</span>
+                <input type="number" id="octoslack_s3_retention" step="any" min="1" class="input-mini text-right" data-bind="value: settings.plugins.Octoslack.s3_config.file_expire_days">
+                <span class="octoslack_valign">days</span>
+	        <br/>
+	        <small class="muted">How long should AWS keep uploaded snapshots before they are automatically delted</small>
+            </div>
+        </div>
+	<br/>
+        <h3>Additional snapshot URLs</h3>
+	<input type="hidden" id="octoslack_snapshot_urls_hidden" data-bind="value: settings.plugins.Octoslack.additional_snapshot_urls">
+        <div id="octoslack_snapshot_urls_container" class="octoslack_hidden">
+        </div>
+        <h3>Snapshot layout</h3>
+            <div class="octoprint_config_row">
+	        <small class="muted">When utilizing multiple snapshots/cameras, the OctoPrint configured snapshot will be included first followed by the user configured snapshots in the order they have been configured above</small>
+	        <br/>
+	        <select data-bind="value: settings.plugins.Octoslack.snapshot_arrangement" class="octoslack_select">
+		    <option value="HORIZONTAL">Horizontal</option>
+		    <option value="VERTICAL">Vertical</option>
+		    <option value="GRID">Grid</option>
+	        </select>
+	        <br/>
+	        <small class="muted"><strong>Horizontal</strong> - Combine snapshot images horizontally into a single image
+	        <br/>
+		<table>
+		    <tr>
+		        <td class="octoslack_small_grid_cell">1</td>
+		        <td class="octoslack_small_grid_cell">2</td>
+		        <td class="octoslack_small_grid_cell">3</td>
+		        <td class="octoslack_small_grid_cell">4</td>
+		    </tr>
+		</table>
+		</small>
+	        <small class="muted"><strong>Vertical</strong> - Combine snapshot images vertically into a single image
+	        <br/>
+		<table>
+		    <tr>
+		        <td class="octoslack_small_grid_cell">1</td>
+		    </tr>
+		    <tr>
+		        <td class="octoslack_small_grid_cell">2</td>
+		    </tr>
+		    <tr>
+		        <td class="octoslack_small_grid_cell">3</td>
+		    </tr>
+		    <tr>
+		        <td class="octoslack_small_grid_cell">4</td>
+		    </tr>
+		</table>
+		</small>
+	        <small class="muted"><strong>Grid</strong> - Combile snapshot images by arranging them on a grid (supports up to 12 snapshots)
+	        <br/>
+		<table>
+		    <tr>
+		        <td class="octoslack_small_grid_cell">1</td>
+		        <td class="octoslack_small_grid_cell">2</td>
+		    </tr>
+		    <tr>
+		        <td class="octoslack_small_grid_cell">3</td>
+		        <td class="octoslack_small_grid_cell">4</td>
+		    </tr>
+		</table>
+		</small>
+            </div>
+    </div>
+    <br/>
+    <h2>OctoPrint Events</h2>
+    <div class="octoslack_config_group">
+        <div class="octoprint_config_row">
+	    <small class="muted">
+		The following variables are available for use in your custom messages
+		<br/>
+		<p class="octoslack_indented">
+			<br/>
+			<strong>{print_name}</strong> - The name of the current print
+			<br/>
+			<strong>{pct_complete}</strong> - Progress metric for the print
+			<br/>
+			<strong>{elapsed_time}</strong> - Time since start of print
+			<br/>
+			<strong>{remaining_time}</strong> - Estimated remaining print time
+			<br/>
+			<strong>{error}</strong> - For error/failed events, the error message (if available)
+		</p>
+	    </small>
+        </div>
+        <div id="octoslack_events_container" class="octoslack_hidden">
+	</div>
+    </div>
+</form>
