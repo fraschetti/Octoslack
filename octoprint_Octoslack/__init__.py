@@ -458,6 +458,7 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 		replacement_params = {
 			"{print_name}" : "N/A",
 			"{pct_complete}" : "N/A",
+			"{current_z}" : "N/A",
 			"{elapsed_time}" : "N/A",
 			"{remaining_time}" : "N/A",
 			"{error}" : "N/A",
@@ -466,12 +467,22 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 		printer_data = self._printer.get_current_data()
 		printer_state = printer_data['state']
 		job_state = printer_data['job']
+		z_height = printer_data['currentZ']
 		progress_state = printer_data['progress']
 
 		file_name = job_state['file']['name']
 		if file_name == None:
 			file_name = "N/A"
 		replacement_params['{print_name}'] = file_name
+
+		z_height_str = ""
+		if not z_height == None and not z_height == 'None':
+			z_height_str = ", Nozzle Height: " + str(z_height) + "mm"
+			
+		replacement_params['{current_z}'] = z_height_str
+
+
+		self._logger.debug("Printer data: " + str(printer_data))
 
 		if reportJobState:
 			print_origin = job_state['file']['origin']
@@ -552,8 +563,7 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 						
 						temp_str += ", " + nozzle_name + ": " + str(printer_temps[key]['actual']) + unichr(176) + "C/" + str(printer_temps[key]['target']) + unichr(176) + "C"
 
-
-			footer = "Printer: " + printer_state['text'] + temp_str
+			footer = "Printer: " + printer_state['text'] + temp_str + z_height_str
 
 
 		if self._settings.get(['include_raspi_temp'], merged=True):
