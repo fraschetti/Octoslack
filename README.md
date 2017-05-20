@@ -35,7 +35,7 @@ An OctoPrint plugin for monitoring your printer and prints via Slack or Mattermo
 
 # Manual installation steps #
 
-    sudo pip install "https://github.com/fraschetti/Octoslack/archive/master.zip"
+    pip install "https://github.com/fraschetti/Octoslack/archive/master.zip"
 
 # Examples #
 
