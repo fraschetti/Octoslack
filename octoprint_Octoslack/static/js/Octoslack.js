@@ -61,7 +61,6 @@ var Octoslack = {
 
 	var s3_retention = $("#octoslack_s3_retention");
 	if (s3_retention.val() <= 0) {
-	    alert('here');
 	    s3_retention.val("60");
 	    s3_retention.trigger('change');
         }
