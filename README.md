@@ -39,14 +39,14 @@ An OctoPrint plugin for monitoring your printer and prints via Slack or Mattermo
 
 # Examples #
 
-## Print Started ##
-![Print started example](/screenshots/Octoslack-PrintStarted.png?raw=true)
-###### Left = Slack  /  Right = Mattermost ######
+> ### Print Started ###
+> ![Print started example](/screenshots/Octoslack-PrintStarted.png?raw=true)
+> ###### Left = Slack  /  Right = Mattermost ######
 
-## Print Progress ##
-![Print progress example](/screenshots/Octoslack-PrintProgress.png?raw=true)
-###### Left = Slack  /  Right = Mattermost ######
+> ### Print Progress ###
+> ![Print progress example](/screenshots/Octoslack-PrintProgress.png?raw=true)
+> ###### Left = Slack  /  Right = Mattermost ######
 
-## Print Finished ##
-![Print finished example](/screenshots/Octoslack-PrintFinished.png?raw=true)
-###### Left = Slack  /  Right = Mattermost ######
+> ### Print Finished ###
+> ![Print finished example](/screenshots/Octoslack-PrintFinished.png?raw=true)
+> ###### Left = Slack  /  Right = Mattermost ######
