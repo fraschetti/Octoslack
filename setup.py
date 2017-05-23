@@ -30,7 +30,7 @@ plugin_author_email = "fraschetti.dev@gmail.com"
 plugin_url = "https://github.com/you/OctoPrint-Octoslack"
 
 # The plugin's license. Can be overwritten within OctoPrint's internal data via __plugin_license__ in the plugin module
-plugin_license = "Apache2"
+plugin_license = "MIT"
 
 # Any additional requirements besides OctoPrint should be listed here
 plugin_requires = ['slackclient','slacker','tinys3','imgurpython','Pillow','humanize']
