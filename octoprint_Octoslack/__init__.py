@@ -313,6 +313,18 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
                     	}
 		}
 
+	def get_settings_restricted_paths(self):
+		return dict(admin=[
+			["slack_apitoken_config", "api_token"],
+			["slack_webhook_config", "webhook_url"],
+			["s3_config", "AWSAccessKey"],
+			["s3_config", "AWSsecretKey"],
+			["s3_config", "s3Bucket"],
+			["imgur_config", "client_id"],
+			["imgur_config", "client_secret"],
+			["additional_snapshot_urls"],
+		])
+
 	def get_settings_version(self):
 		return 1
 
