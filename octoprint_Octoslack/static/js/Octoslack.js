@@ -194,7 +194,7 @@ var Octoslack = {
 		[ "PrintCancelled", "Print cancelled" ],
 		[ "PrintPaused", "Print paused" ],
 		[ "PrintResumed", "Print resumed" ],
-		[ "PrintDone", "Prine finished" ],
+		[ "PrintDone", "Print finished" ],
 		[ "Progress", "Print progress" ],
 		[ "MovieRendering", "Timelapse render started" ],
 		[ "MovieDone", "Timelapse render finished" ],
