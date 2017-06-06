@@ -43,13 +43,17 @@ var Octoslack = {
 
 	this.last_connection_method = $("#octoslack_connection_method_hidden").val();
 	this.last_bot_commands = $("#octoslack_bot_commands").is(":checked");
+
+        this.changeImgurClientID();
+        $("#octoslack_imgur_refresh_token").bind('input propertychange', function() { Octoslack.changeImgurRefreshToken(); });
+        $("#octoslack_imgur_album_id").bind('input propertychange', function() { Octoslack.changeImgurAlbumID(); });
     },
 
     setInitialInputStates : function() {
 	var connection_method = $("#octoslack_connection_method_hidden").val();
         var connection_radio = $("input[name=octoslack_connection_type][value=" + connection_method + "]");
 	connection_radio.attr('checked', 'checked');
-        connection_radio.trigger('click')
+        connection_radio.trigger('click');
 
 	var slack_identity_check= $("#octoslack_slack_identity_check")[0];
 	this.toggleUseSlackIdentity(slack_identity_check);
@@ -57,7 +61,7 @@ var Octoslack = {
 	var upload_method = $("#octoslack_upload_method_hidden").val();
         var upload_method_radio = $("input[name=octoslackSnapshotUploadMethod][value=" + upload_method + "]");
 	upload_method_radio.attr('checked', 'checked');
-        upload_method_radio.trigger('click')
+        upload_method_radio.trigger('click');
 
 	var s3_retention = $("#octoslack_s3_retention");
 	if (s3_retention.val() <= 0) {
@@ -149,7 +153,7 @@ var Octoslack = {
 
         var connection_method_hidden = $("#octoslack_connection_method_hidden");
         connection_method_hidden.val(new_type);
-        connection_method_hidden.trigger('change')
+        connection_method_hidden.trigger('change');
     },
 
     toggleUseSlackIdentity : function(checkbox) {
@@ -185,6 +189,83 @@ var Octoslack = {
         var div_elem = document.createElement('div');
         div_elem.appendChild(text_elem);
         return div_elem.innerHTML;
+    },
+
+    changeImgurClientID : function() {
+        var client_id = $("#octoslack_imgur_client_id").val();
+        client_id = client_id.trim();
+
+        var auth_link = $("#octoslack_imgur_auth_link");
+
+	if(client_id.length > 0) {
+            var authUrl = "https://api.imgur.com/oauth2/authorize?client_id=" + client_id + "&response_type=token";
+            auth_link.attr('href', authUrl);
+            auth_link.attr('target', "_blank");
+        } else {
+            auth_link.attr('href', "javascript:Octoslack.showMissingImgurClientIDDialog()");
+            auth_link.removeAttr('target');
+        }
+    },
+
+    imgurRefreshTokenRegex : new RegExp('refresh_token=([^&]+)'),
+
+    changeImgurRefreshToken : function() {
+        var refresh_token_elem = $("#octoslack_imgur_refresh_token");
+        var refresh_token = refresh_token_elem.val();
+        refresh_token = refresh_token.trim();
+
+        //Handle pasted app auth urls
+        if(!refresh_token.toLowerCase().startsWith("http"))
+            return;
+
+        var matches = this.imgurRefreshTokenRegex.exec(refresh_token);
+	if(matches.length > 1) {
+            refresh_token = matches[1];
+            refresh_token = refresh_token.trim();
+    
+            //Don't allow a loop of checking for http
+            if(refresh_token.toLowerCase().startsWith("http"))
+                return;
+
+            refresh_token_elem.val(refresh_token);
+            refresh_token_elem.trigger('change');
+        }
+    },
+
+    imgurAlbumIDRegex : new RegExp('/a/([^&]+)'),
+
+    changeImgurAlbumID : function() {
+        var album_id_elem = $("#octoslack_imgur_album_id");
+        var album_id = album_id_elem.val();
+        album_id = album_id.trim();
+
+        //Handle pasted album urls
+        if(!album_id.toLowerCase().startsWith("http"))
+            return;
+
+        var matches = this.imgurAlbumIDRegex.exec(album_id);
+	if(matches.length > 1) {
+            album_id = matches[1];
+            album_id = album_id.trim();
+    
+            //Don't allow a loop of checking for http
+            if(album_id.toLowerCase().startsWith("http"))
+                return;
+
+            album_id_elem.val(album_id);
+            album_id_elem.trigger('change');
+        }
+    },
+
+    showMissingImgurClientIDDialog() {
+        var title = "Required Octoslack field not populated";
+        var text = "When using the API Token for Slack connectivity, a Slack channel must be provided";
+        var message = $("<p></p>")
+                .append(text);
+        showMessageDialog({
+                title: gettext(title),
+                message: message
+        });
     },
 
     buildOctoPrintEventConfigs : function() {
@@ -332,6 +413,6 @@ var Octoslack = {
 	var urls_hidden = $("#octoslack_snapshot_urls_hidden");
 
 	urls_hidden.val(combined_str);
-        urls_hidden.trigger('change')
+        urls_hidden.trigger('change');
     },
 }

@@ -37,7 +37,8 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 	##TODO FEATURE - generate an animated gif of the print - easy enough if we can find a python ib to create the gif (images2gif is buggy & moviepy, imageio, and and visvis which rely on numpy haven't worked out as I never neven let numpy try to finish installing after 5/10 minutes on my RasPi3)
 	##TODO FEATURE - add the timelapse gallery for cancelled/failed/completed as a single image
 	##TODO ENHANCEMENT - Starting in OctoPrint 1.3.3 the ordering of Cancelled and Failed prints should be fixed so we can detect a cancel and not report the failed event
-	##TODO FEATURE - Allow for multiple full configs so events can be sent to multiple slack teams
+	##TODO FEATURE - Allow for multiple full configs so events can be sent to multiple slack/mm teams
+	##TODO FEATURE - Add support for Imgur image title + description
 
 
 	##~~ SettingsPlugin mixin
@@ -322,6 +323,7 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 			["s3_config", "s3Bucket"],
 			["imgur_config", "client_id"],
 			["imgur_config", "client_secret"],
+			["imgur_config", "refresh_token"],
 			["additional_snapshot_urls"],
 		])
 
@@ -1074,13 +1076,23 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 
 						imgur_client_id = imgur_config['client_id']
 						imgur_client_secret = imgur_config['client_secret']
+						imgur_client_refresh_token = imgur_config['refresh_token']
+						imgur_album_id = imgur_config['album_id']
 
-						imgur_client = ImgurClient(imgur_client_id, imgur_client_secret)
+						imgur_client = ImgurClient(imgur_client_id, imgur_client_secret, None, imgur_client_refresh_token)
 
-						imgurUploadRsp = imgur_client.upload_from_path(local_file_path, config=None, anon=False)
-						self._logger.debug("imgur upload response: " + str(imgurUploadRsp))
+						imgur_upload_config = { }
+						if not imgur_album_id == None and len(imgur_album_id) > 0:
+							imgur_upload_config['album'] = imgur_album_id
 
-						self._logger.debug("Imgue upload response: " + str(imgurUploadRsp))
+						##imgur_upload_config['title'] = 'ImageTitle123'
+						##imgur_upload_config['description'] = 'ImageDescription123'
+
+						self._logger.debug("Imgur upload config: " + str(imgur_upload_config))
+
+						imgurUploadRsp = imgur_client.upload_from_path(local_file_path, config=imgur_upload_config, anon=False)
+						self._logger.debug("Imgur upload response: " + str(imgurUploadRsp))
+
 						imgur_upload_elapsed = time.time() - imgur_upload_start
 						self._logger.debug("Uploaded snapshot to Imgur in " + str(round(imgur_upload_elapsed, 2)) + " seconds")
 					
@@ -1101,15 +1113,19 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 		urls = []
 
 		localCamera = self._settings.globalGet(["webcam", "snapshot"])
+		localCameraFlipH = self._settings.globalGet(["webcam", "flipH"])
+		localCameraFlipV = self._settings.globalGet(["webcam", "flipV"])
+		localCameraRotate90 = self._settings.globalGet(["webcam", "rotate90"])
+
 		if not localCamera == None:
-			urls.append(localCamera)
+			urls.append((localCamera, localCameraFlipH, localCameraFlipV, localCameraRotate90))
 
 		additional_snapshot_urls = self._settings.get(['additional_snapshot_urls'], merged=True)
 		if not additional_snapshot_urls == None:
 			for url in additional_snapshot_urls.split(","):
 				url = url.strip()
 				if len(url) > 0:
-					urls.append(urllib2.unquote(url))
+					urls.append((urllib2.unquote(url), False, False, False))
 		
 		self._logger.debug("Snapshot URLs: " + str(urls))
 
@@ -1120,10 +1136,12 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 		download_start = time.time()
 
 		idx = 0
-		for url in urls:
+		for url_data in urls:
+			url, flip_h, flip_v, rotate_90 = url_data
+
 			thread_responses.append((None,None))
 
-			t = threading.Thread(target=self.download_image, args=(url, idx, thread_responses))
+			t = threading.Thread(target=self.download_image, args=(url, flip_h, flip_v, rotate_90, idx, thread_responses))
 			t.setDaemon(True)
 			threads.append(t)
 			t.start()
@@ -1159,7 +1177,7 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 		else:
 			return downloaded_images[0], snapshot_errors
 
-	def download_image(self, url, rsp_idx, responses):
+	def download_image(self, url, flip_h, flip_v, rotate_90, rsp_idx, responses):
 		imgData = None
 		temp_fd = None
 		temp_filename = None
@@ -1204,6 +1222,17 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 			imgByteCount = temp_file.tell()
 
 			temp_file.close()
+
+			if flip_h or flip_v or rotate_90:
+				tmp_img = Image.open(temp_filename)
+				if flip_h:
+					tmp_img = tmp_img.transpose(Image.FLIP_LEFT_RIGHT)
+				if flip_v:
+					tmp_img = tmp_img.transpose(Image.FLIP_TOP_BOTTOM)
+				if rotate_90:
+					tmp_img = tmp_img.transpose(Image.ROTATE_90)
+
+				tmp_img.save(temp_filename, "JPEG")
 
 			self._logger.debug("Downloaded snapshot from URL: " + url + " (" + octoprint.util.get_formatted_size(imgByteCount) + ") to " + temp_filename)
 
@@ -1259,11 +1288,9 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 				arrangement = "HORIZONTAL"
 
 			if arrangement == "VERTICAL":
-				newHeight = total_height
-				newWidth = max_width
+				grid_size = image_count,1
 			elif arrangement == "HORIZONTAL":
-				newHeight = max_height
-				newWidth = total_width
+				grid_size = 1,image_count
 			elif arrangement == "GRID":
 				##The grid code is a mess but it was a quick and dirt solution we can rewrite later
 
@@ -1291,66 +1318,76 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 					grid_size = 4,3
 				elif image_count == 12:
 					grid_size = 4,3
-
-
-				row_count, col_count = grid_size
-
-				row_idx = 0
-				col_idx = 0
-
-				for img in images:
-					if len(grid_row_images) <= row_idx:
-						grid_row_images.append([])
-					if len(grid_row_heights) <= row_idx:
-						grid_row_heights.append([])
-					if len(grid_col_widths) <= col_idx:
-						grid_col_widths.append([])
-
-					width,height = img.size
-
-					grid_row_images[row_idx].append(img)
-					grid_row_heights[row_idx].append(height)
-					grid_col_widths[col_idx].append(width)
-
-					col_idx += 1
-					if col_idx == col_count:
-						col_idx = 0
-						row_idx += 1
-
-				newHeight = 0
-				newWidth = 0
-
-				for row in grid_row_heights:
-					newHeight += max(row)
-
-				for row in grid_col_widths:
-					newWidth += max(row)
-
 			else:
 				return None, None
 
 
+			row_count, col_count = grid_size
+
+			row_idx = 0
+			col_idx = 0
+
+			for img in images:
+				if len(grid_row_images) <= row_idx:
+					grid_row_images.append([])
+				if len(grid_row_heights) <= row_idx:
+					grid_row_heights.append([])
+				if len(grid_col_widths) <= col_idx:
+					grid_col_widths.append([])
+
+				width,height = img.size
+
+				grid_row_images[row_idx].append(img)
+				grid_row_heights[row_idx].append(height)
+				grid_col_widths[col_idx].append(width)
+
+				col_idx += 1
+				if col_idx == col_count:
+					col_idx = 0
+					row_idx += 1
+
+			newHeight = 0
+			newWidth = 0
+
+			for row in grid_row_heights:
+				newHeight += max(row)
+
+			for row in grid_col_widths:
+				newWidth += max(row)
+
+			##Now that we have the exact height/width, add some spacing around/between the images
+			image_spacer = 10
+
+			newWidth += (image_spacer * 2) ## outer borders
+			newHeight += (image_spacer * 2) ## outer borders
+
+			newWidth += (col_count - 1) * image_spacer ##horizontal spacers
+			newHeight += (row_count - 1) * image_spacer ##vertical spacers
+
+
 			new_im = Image.new('RGB', (newWidth, newHeight))
 
-			x_offset = 0
-			y_offset = 0
+			x_offset = image_spacer
+			y_offset = image_spacer
 	
 			if arrangement == "VERTICAL" or arrangement == "HORIZONTAL":
 				for im in images:
 					if arrangement == "VERTICAL":
-						x_adjust = 0
+						x_adjust = image_spacer
 						if im.size[0] != max_width:
 							x_adjust = (max_width - im.size[0]) / 2
 
 						new_im.paste(im, (x_adjust,y_offset))
 						y_offset += im.size[1]
+						y_offset += image_spacer
 					elif arrangement == "HORIZONTAL":
-						y_adjust = 0
+						y_adjust = image_spacer
 						if im.size[1] != max_height:
 							y_adjust = (max_height - im.size[1]) / 2
 
 						new_im.paste(im, (x_offset,y_adjust))
 						x_offset += im.size[0]
+						x_offset += image_spacer
 			elif arrangement == "GRID":
 				row_idx = 0
 				col_idx = 0
@@ -1373,10 +1410,12 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 					
 					col_idx += 1
 					x_offset += col_width
+					x_offset += image_spacer
 
 					if col_idx == col_count:
 						y_offset += row_height
-						x_offset = 0
+						y_offset += image_spacer
+						x_offset = image_spacer
 
 						col_idx = 0
 						row_idx += 1
