@@ -27,7 +27,7 @@ plugin_author = "Chris Fraschetti"
 plugin_author_email = "fraschetti.dev@gmail.com"
 
 # The plugin's homepage URL. Can be overwritten within OctoPrint's internal data via __plugin_url__ in the plugin module
-plugin_url = "https://github.com/you/OctoPrint-Octoslack"
+plugin_url = "https://github.com/fraschetti/OctoPrint-Octoslack"
 
 # The plugin's license. Can be overwritten within OctoPrint's internal data via __plugin_license__ in the plugin module
 plugin_license = "MIT"
