@@ -1079,6 +1079,9 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 						imgur_client_refresh_token = imgur_config['refresh_token']
 						imgur_album_id = imgur_config['album_id']
 
+						if len(imgur_client_refresh_token.strip()) == 0:
+							imgur_client_refresh_token = None
+
 						imgur_client = ImgurClient(imgur_client_id, imgur_client_secret, None, imgur_client_refresh_token)
 
 						imgur_upload_config = { }
