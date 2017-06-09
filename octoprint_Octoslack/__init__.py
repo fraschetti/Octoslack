@@ -390,12 +390,12 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 
 				# version check: github repository
 				type="github_release",
-				user="you",
-				repo="OctoPrint-Octoslack",
+				user="fraschetti",
+				repo="Octoslack",
 				current=self._plugin_version,
 
 				# update method: pip
-				pip="https://github.com/you/OctoPrint-Octoslack/archive/{target_version}.zip"
+				pip="https://github.com/fraschetti/Octoslack/archive/{target_version}.zip"
 			)
 		)
 
