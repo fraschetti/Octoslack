@@ -305,6 +305,41 @@ var Octoslack = {
 	    eventHtml.push("        </div>");
 
 
+            if(internalName == "Progress") {
+                //IntervalPct
+	        eventHtml.push("        <div class='octoprint_config_row'>");
+	        eventHtml.push("            <input type='number' step='any' min='0' max='99' class='input-mini text-right' id='octoslack_event_" + internalName + "_message' data-bind='value: settings.plugins.Octoslack.supported_events." + internalName + ".IntervalPct'>");
+	        eventHtml.push("            <div class='octoslack_label octoslack_action_label' onclick=\"$('#octoslack_event_" + internalName + "_message').trigger('click')\">Interval - Percentage</div>");
+	        eventHtml.push("            <br/>");
+	        eventHtml.push("            <small class='muted'>");
+	        eventHtml.push("                0 = disabled");
+	        eventHtml.push("                <br/>");
+	        eventHtml.push("                A value of 5 would indicate report progress should be logged at 5%, 10%, 15%, etc.");
+	        eventHtml.push("            </small>");
+	        eventHtml.push("        </div>");
+	        eventHtml.push("        <br/>");
+
+
+                //IntervalTime
+	        eventHtml.push("        <div class='octoprint_config_row'>");
+	        eventHtml.push("            <input type='number' step='any' min='0' class='input-mini text-right' id='octoslack_event_" + internalName + "_message' data-bind='value: settings.plugins.Octoslack.supported_events." + internalName + ".IntervalTime'>");
+	        eventHtml.push("            <div class='octoslack_label octoslack_action_label' onclick=\"$('#octoslack_event_" + internalName + "_message').trigger('click')\">Interval - Time (Minutes)</div>");
+	        eventHtml.push("            <br/>")
+	        eventHtml.push("            <small class='muted'>");
+	        eventHtml.push("                0 = disabled");
+	        eventHtml.push("                <br/>");
+	        eventHtml.push("                A value of 5 would indicate report progress should be logged every 5 minutes ");
+	        eventHtml.push("            </small>");
+	        eventHtml.push("        </div>");
+	        eventHtml.push("        <br/>");
+            }
+
+            //ChannelOverride
+	    eventHtml.push("        <div class='octoprint_config_row'>");
+	    eventHtml.push("            <input type='text' size='30' id='octoslack_event_" + internalName + "_message' data-bind='value: settings.plugins.Octoslack.supported_events." + internalName + ".ChannelOverride'>");
+	    eventHtml.push("            <div class='octoslack_label octoslack_action_label' onclick=\"$('#octoslack_event_" + internalName + "_message').trigger('click')\">Channel(s) override</div>");
+	    eventHtml.push("        </div>");
+
             //CaptureSnapshot
 	    eventHtml.push("        <div class='octoprint_config_row'>");
 	    eventHtml.push("            <input type='checkbox' class='octoslack_valign' id='octoslack_event_" + internalName + "_snapshot' data-bind='checked: settings.plugins.Octoslack.supported_events." + internalName + ".CaptureSnapshot'>");

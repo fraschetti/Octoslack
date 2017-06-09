@@ -26,6 +26,15 @@
 	    </p>
 	</div>
 	<div class="octoprint_config_row">
+            <input type="checkbox" class="octoslack_valign" id="octoslack_ignore_cancel_fail_event" data-bind="checked: settings.plugins.Octoslack.ignore_cancel_fail_event">
+            <div class="octoslack_label octoslack_action_label" onclick="$('#octoslack_ignore_cancel_fail_event').trigger('click')">Ignore failed event for cancelled prints</div>
+	    <br/>
+	    <small class="muted">
+                <br/>
+                As designed, OctoPrint not only triggers a <strong>Print cancelled</strong> event but also a corresponding <strong>Print failed</strong> event. Enabling this option (supported in OctoPrint 1.3.3+) will instruct the plugin to ignore the <strong>Print failed</strong> for this particular scenario.
+            </small>
+	</div>
+	<div class="octoprint_config_row">
             <input type="checkbox" class="octoslack_valign" id="octoslack_mattermost_compatabilty_mode" onclick="Octoslack.applyMattermostChanges();" data-bind="checked: settings.plugins.Octoslack.mattermost_compatability_mode">
             <div class="octoslack_label octoslack_action_label" onclick="$('#octoslack_mattermost_compatabilty_mode').trigger('click')">Mattermost compatability</div>
 	    <br/>
@@ -115,12 +124,16 @@
 		<small class="muted">A WebHook URL can be generated via your Slack team's settings dialog. Apps &amp; integrations --&gt; Manage --&gt; Custom Integrations --&gt; Incoming WebHooks</small>
             </div>
         </div>
-        <h3>Slack channel</h3>
+        <h3>Slack channel(s)</h3>
         <div class="octoprint_config_row">
-            <div class="octoslack_label">Channel</div>
-            <input type="text" size="30" id="octoslack_channel" data-bind="value: settings.plugins.Octoslack.channel">
+            <div class="octoslack_label">Channel(s)</div>
+            <input type="text" class="octoslack_width_auto" size="60" id="octoslack_channel" data-bind="value: settings.plugins.Octoslack.channel">
 	    <br/>
-	    <small class="muted">Optional for WebHooks but required for when using an API Token</small>
+	    <small class="muted">
+                A single channel can be specified or multiple channels can provided via a comma-separated list (channel1,channel2,channel3)
+	        <br/>
+                Optional for WebHooks but required for when using an API Token
+            </small>
         </div>
         <h3>Slack identity</h3>
         <div class="octoprint_config_row">
@@ -340,6 +353,8 @@
 			<br/>
 			<strong>{error}</strong> - For error/failed events, the error message (if available)
 		</p>
+		<br/>
+                When <strong>Channel(s) override</strong> is left blank, enabled events will sent to the default Channel(s) configured above
 	    </small>
         </div>
         <div id="octoslack_events_container" class="octoslack_hidden">

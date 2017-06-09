@@ -8,6 +8,7 @@ from slacker import Slacker,IncomingWebhook
 from imgurpython import ImgurClient
 from imgurpython.helpers.error import ImgurClientError
 from PIL import Image
+from octoprint.util import RepeatedTimer
 import octoprint.util
 import octoprint.plugin
 import urllib2
@@ -16,6 +17,7 @@ import base64
 import json
 import os
 import uuid
+import time
 import datetime
 import tinys3
 import humanize
@@ -36,9 +38,8 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 
 	##TODO FEATURE - generate an animated gif of the print - easy enough if we can find a python ib to create the gif (images2gif is buggy & moviepy, imageio, and and visvis which rely on numpy haven't worked out as I never neven let numpy try to finish installing after 5/10 minutes on my RasPi3)
 	##TODO FEATURE - add the timelapse gallery for cancelled/failed/completed as a single image
-	##TODO ENHANCEMENT - Starting in OctoPrint 1.3.3 the ordering of Cancelled and Failed prints should be fixed so we can detect a cancel and not report the failed event
-	##TODO FEATURE - Allow for multiple full configs so events can be sent to multiple slack/mm teams
 	##TODO FEATURE - Add support for Imgur image title + description
+	##TODO INTERNAL - Test on a Windows OctoPrint deployment to validate all necessary libs are available
 
 
 	##~~ SettingsPlugin mixin
@@ -62,7 +63,7 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 				"username" : "",
 			},
 			"channel" : "",
-
+			"ignore_cancel_fail_event" : True,
 			"mattermost_compatability_mode" : False,
 			"include_raspi_temp" : True,
 			"snapshot_upload_method" : "NONE", ##NONE, S3 or IMGUR
@@ -83,6 +84,7 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 				##Not a real event but we'll leverage the same config structure
                     		"Help" : {
                         		"Enabled" : True,
+                        		"ChannelOverride" : "",
                         		"Message" : ":heavy_minus_sign: Help - Supported commands :question:",
                         		"Fallback" : "",
                         		"Color" : "good",
@@ -97,6 +99,7 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
                         	},
                     		"Startup" : {
                         		"Enabled" : False,
+                        		"ChannelOverride" : "",
                         		"Message" : ":heavy_minus_sign:  Octoprint service started :chart_with_upwards_trend:",
                         		"Fallback" : "Octoprint service started",
                         		"Color" : "good",
@@ -110,6 +113,7 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
                         	},
                     		"Shutdown" : {
                         		"Enabled" : False,
+                        		"ChannelOverride" : "",
                         		"Message" : ":heavy_minus_sign:  Octoprint service stopped :chart_with_downwards_trend:",
                         		"Fallback" : "Octoprint service stopped",
                         		"Color" : "good",
@@ -123,6 +127,7 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
                         	},
                     		"Connecting" : {
                         		"Enabled" : False,
+                        		"ChannelOverride" : "",
                         		"Message" : ":heavy_minus_sign:  Connecting to printer :satellite:",
                         		"Fallback" : "Connecting to printer",
                         		"Color" : "good",
@@ -136,6 +141,7 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
                         	},
                     		"Connected" : {
                         		"Enabled" : False,
+                        		"ChannelOverride" : "",
                         		"Message" : ":heavy_minus_sign:  Successfully connected to printer :computer:",
                         		"Fallback" : "Successfully connected to printer",
                         		"Color" : "good",
@@ -149,6 +155,7 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
                         	},
                     		"Disconnecting" : {
                         		"Enabled" : False,
+                        		"ChannelOverride" : "",
                         		"Message" : ":heavy_minus_sign:  Printer disconnecting :confused:",
                         		"Fallback" : "Printer disconnecting",
                         		"Color" : "warning",
@@ -162,6 +169,7 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
                         	},
                     		"Disconnected" : {
                         		"Enabled" : False,
+                        		"ChannelOverride" : "",
                         		"Message" : ":heavy_minus_sign:  Printer disconnected :worried:",
                         		"Fallback" : "Printer disconnected",
                         		"Color" : "danger",
@@ -175,6 +183,7 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
                         	},
                     		"Error" : {
                         		"Enabled" : True,
+                        		"ChannelOverride" : "",
                         		"Message" : ":heavy_minus_sign:  Printer error :fire:",
                         		"Fallback" : "Printer error: {error}",
                         		"Color" : "danger",
@@ -188,6 +197,7 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
                         	},
                     		"PrintStarted" : {
                         		"Enabled" : True,
+                        		"ChannelOverride" : "",
                         		"Message" : ":heavy_minus_sign:  A new print has started :rocket:",
                         		"Fallback" : "Print started: {print_name}, Estimate: {remaining_time}",
                         		"Color" : "good",
@@ -201,6 +211,7 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
                         	},
                     		"PrintFailed" : {
                         		"Enabled" : True,
+                        		"ChannelOverride" : "",
                         		"Message" : ":heavy_minus_sign:  Print failed :bomb:",
                         		"Fallback" : "Print failed: {print_name}",
                         		"Color" : "danger",
@@ -214,6 +225,7 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
                         	},
                     		"PrintCancelled" : {
                         		"Enabled" : True,
+                        		"ChannelOverride" : "",
                         		"Message" : ":heavy_minus_sign:  Print cancelled :no_good:",
                         		"Fallback" : "Print cancelled: {print_name}",
                         		"Color" : "warning",
@@ -227,6 +239,7 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
                         	},
                     		"PrintDone" : {
                         		"Enabled" : True,
+                        		"ChannelOverride" : "",
                         		"Message" : ":heavy_minus_sign:  Print finished successfully :dancer:",
                         		"Fallback" : "Print finished successfully: {print_name}, Time: {elapsed_time}",
                         		"Color" : "good",
@@ -241,6 +254,7 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 				##Not a real event but we'll leverage the same config structure
                     		"Progress" : {
                         		"Enabled" : False,
+                        		"ChannelOverride" : "",
                         		"Message" : ":heavy_minus_sign: Print progress {pct_complete} :horse_racing:",
                         		"Fallback" : "Print progress: {pct_complete} - {print_name}, Elapsed: {elapsed_time}, Remaining: {remaining_time}",
                         		"Color" : "good",
@@ -250,9 +264,12 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 					"ReportJobOrigEstimate" : False,
 					"ReportJobProgress" : True,
 					"ReportMovieStatus" : False,
+					"IntervalPct" : 25,
+					"IntervalTime" : 0,
                         	},
                     		"PrintPaused" : {
                         		"Enabled" : True,
+                        		"ChannelOverride" : "",
                         		"Message" : ":heavy_minus_sign:  Print paused :zzz:",
                         		"Fallback" : "Print paused: {pct_complete} - {print_name}",
                         		"Color" : "warning",
@@ -265,6 +282,7 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
                         	},
                     		"PrintResumed" : {
                         		"Enabled" : True,
+                        		"ChannelOverride" : "",
                         		"Message" : ":heavy_minus_sign:  Print resumed :runner:",
                         		"Fallback" : "Print resumed: {pct_complete} - {print_name}",
                         		"Color" : "good",
@@ -277,6 +295,7 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
                         	},
                     		"MovieRendering" : {
                         		"Enabled" : False,
+                        		"ChannelOverride" : "",
                         		"Message" : ":heavy_minus_sign:  Timelapse movie rendering :clapper:",
                         		"Fallback" : "Timelapse movie rendering: {print_name}",
                         		"Color" : "good",
@@ -289,6 +308,7 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
                         	},
                     		"MovieDone" : {
                         		"Enabled" : False,
+                        		"ChannelOverride" : "",
                         		"Message" : ":heavy_minus_sign:  Timelapse movie rendering complete :movie_camera:",
                         		"Fallback" : "Timelapse movie rendering complete: {print_name}",
                         		"Color" : "good",
@@ -301,6 +321,7 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
                         	},
                     		"MovieFailed" : {
                         		"Enabled" : False,
+                        		"ChannelOverride" : "",
                         		"Message" : ":heavy_minus_sign:  Timelapse movie rendering failed :boom:",
                         		"Fallback" : "Timelapse movie rendering failed: {print_name}, Error: {error}",
                         		"Color" : "danger",
@@ -329,6 +350,10 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 
 	def get_settings_version(self):
 		return 1
+
+	def on_settings_save(self, data):
+        	octoprint.plugin.SettingsPlugin.on_settings_save(self, data)
+		self.update_progress_timer()
 
 
 	##~ TemplatePlugin mixin
@@ -378,9 +403,7 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 
 	def on_after_startup(self):
         	self._logger.debug("Starting RTM client")
-
 		self.start_rtm_client()
-
         	self._logger.debug("Started RTM client")
 
 
@@ -396,16 +419,84 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 
 	def on_print_progress(self, location, path, progress):
 		try:
-			if (progress % 10 == 0 and progress != 0) or progress == 100:
-				self.on_event("Progress", {"progress":progress})
+			self._logger.debug("Progress: " + str(progress))
+
+			progress_interval = int(self._settings.get(['supported_events'], merged=True).get('Progress').get('IntervalPct'))
+
+			if (progress % progress_interval == 0 and progress != 0) or progress == 100:
+				self.handle_event("Progress", None, {"progress":progress})
 		except Exception as e:
-			self._logger.exception("Error processing progess event, Error: " + str(e.message))
+			self._logger.exception("Error processing progress event, Error: " + str(e.message))
 		
 
 	##~~ EventPlugin mixin
 
+	def progress_timer_tick(self):
+		self._logger.debug("Progress timer tick")
+ 		self.handle_event("Progress", None, {})
+
+	print_cancel_time = None
+	progress_timer = None
+
+	def start_progress_timer(self):
+		progress_timer_interval = int(self._settings.get(['supported_events'], merged=True).get('Progress').get('IntervalTime'))
+		if progress_timer_interval > 0 and (self._printer.is_printing() or self._printer.is_paused()) and not self._printer.is_ready():
+			self._logger.debug("Starting progress timer")
+			self.progress_timer = RepeatedTimer(progress_timer_interval * 60, self.progress_timer_tick, run_first=False)
+			self.progress_timer.start()
+
+	def update_progress_timer(self):
+		restart = False
+
+		new_interval = int(self._settings.get(['supported_events'], merged=True).get('Progress').get('IntervalTime'))	
+		if self.progress_timer == None and new_interval > 0:
+			restart = True
+		else:
+			existing_interval = 0
+			if not self.progress_timer == None:
+				existing_interval = self.progress_timer.interval
+
+			if new_interval != existing_interval:
+				restart = True
+
+		if restart and new_interval > 0:
+			self.stop_progress_timer()
+
+			
+			self.start_progress_timer()
+
+
+	def stop_progress_timer(self):
+		if not self.progress_timer == None:
+			self._logger.debug("Stopping progress timer")
+			self.progress_timer.cancel()
+			self.progress_timer = None
+		
+
 	def on_event(self, event, payload):
+		self.handle_event(event, None, payload)
+
+	def handle_event(self, event, channel_override, payload):
 		try:
+			if event == "PrintCancelled":
+				self.stop_progress_timer()
+				self.print_cancel_time = time.time()
+			elif event == "PrintFailed":
+				self.stop_progress_timer()
+
+				ignore_cancel_fail_event = self._settings.get(['ignore_cancel_fail_event'], merged=True)
+				##If the ignore flag is enabled and we've seen a PrintCancelled within 30s, ignore the PrintFailed event
+				if ignore_cancel_fail_event and not self.print_cancel_time == None and (time.time() - self.print_cancel_time) < 30:
+					self._logger.debug("Ignoring PrintFailed event within accecptable window of a PrintCancelled event")
+					return
+			elif event == "PrintStarted":
+				self.start_progress_timer()
+				self.print_cancel_time = None
+			elif event == "PrintDone":
+				self.stop_progress_timer()
+				self.print_cancel_time = None
+					
+
 			supported_events = self._settings.get(['supported_events'], merged=True)
 			if supported_events == None or not event in supported_events:
 				return
@@ -422,13 +513,13 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 			if payload == None:
 				payload = {}
 
-			self._logger.debug("Event: " + event + ", Payload: " + str(payload))
+			self._logger.debug("Event: " + event + ", ChannelOverride: " + str(channel_override) + ", Payload: " + str(payload))
 
-			self.process_slack_event(event, event_settings, payload)
+			self.process_slack_event(event, event_settings, channel_override, payload)
 		except Exception as e:
 			self._logger.exception("Error processing event: " + event + ", Error: " + str(e.message))
 	
-	def process_slack_event(self, event, event_settings, event_payload):
+	def process_slack_event(self, event, event_settings, channel_override, event_payload):
 		fallback = ""
 		pretext = ""
 		title = ""
@@ -446,6 +537,8 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 		reportFinalPrintTime = False
 		includeSupportedCommands = False
 	
+		if (channel_override == None or len(channel_override.strip()) == 0) and 'ChannelOverride' in event_settings:
+			channel_override = event_settings['ChannelOverride']
 		if 'Fallback' in event_settings:
 			fallback = event_settings['Fallback']
 		if 'Message' in event_settings:
@@ -657,7 +750,7 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 				if 'value' in field:
 					field['value'] = field['value'].replace(param, replacement_params[param])
 				
-		self.send_slack_message(event, fallback, pretext, title, text, color, fields, footer, includeSnapshot)
+		self.send_slack_message(event, channel_override, fallback, pretext, title, text, color, fields, footer, includeSnapshot)
 
 
 	def start_rtm_client(self):
@@ -755,7 +848,7 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 
 		if command == "help":
 			self._logger.debug("RTM - help command")
- 			self.on_event("Help", {})
+ 			self.handle_event("Help", channel, {})
 			reaction = positive_reaction
 			
 		elif command == "stop":
@@ -783,7 +876,7 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 
 		elif command == "status":
 			self._logger.debug("RTM - status command")
- 			self.on_event("Progress", {})
+ 			self.handle_event("Progress", channel, {})
 			reaction = positive_reaction
 
 		else:
@@ -878,7 +971,7 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 		return time_str
 
 
-	def send_slack_message(self, event, fallback, pretext, title, text, color, fields, footer, includeSnapshot):
+	def send_slack_message(self, event, channel_override, fallback, pretext, title, text, color, fields, footer, includeSnapshot):
 
 		slackAPIToken = None
 		slackWebHookUrl = None
@@ -918,7 +1011,11 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 				if self.mattermost_mode():
 					text += "\n* " + "\n* ".join(snapshot_errors)
 				else:
-					text += "\n" + "•" + "\n•".join(snapshot_errors)
+					text += "\n"
+
+					for snapshot_error in snapshot_errors:
+						text += "\n *-* "
+						text += snapshot_error
 
 			if not hosted_url == None:
 				attachment['image_url'] = hosted_url
@@ -982,49 +1079,58 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 			if 'username' in slack_identity_config:
 				slack_username = slack_identity_config['username']
 
-		channel = self._settings.get(['channel'], merged=True)
-		if not channel:
-			channel = ''
+		channels = channel_override
+		if channels == None or len(channels.strip()) == 0:
+			channels = self._settings.get(['channel'], merged=True)
+		if not channels:
+			channels = ''
 
-		if not slackAPIToken == None and len(slackAPIToken) > 0:
-			try:
-				slackAPIConnection = Slacker(slackAPIToken)
+		self._logger.debug("Channels: " + channels)
+	
+		for channel in channels.split(","):
+			channel = channel.strip()
+			if len(channel) == 0:
+				continue
 
-				apiRsp = slackAPIConnection.chat.post_message(channel, 
-					text='', 
-					username=slack_username,
-					as_user=slack_as_user,
-					attachments=attachments_json,
-					icon_url=slack_icon_url,
-					icon_emoji=slack_icon_emoji)
+			if not slackAPIToken == None and len(slackAPIToken) > 0:
+				try:
+					slackAPIConnection = Slacker(slackAPIToken)
+	
+					apiRsp = slackAPIConnection.chat.post_message(channel, 
+						text='', 
+						username=slack_username,
+						as_user=slack_as_user,
+						attachments=attachments_json,
+						icon_url=slack_icon_url,
+						icon_emoji=slack_icon_emoji)
 
-				self._logger.debug("Slack API message send response: " + str(apiRsp))
-			except Exception as e:
-				self._logger.exception("Slack API message send error: " + str(e))
-		elif not slackWebHookUrl == None and len(slackWebHookUrl) > 0:
-			slack_msg = {}
-			slack_msg['channel'] = channel
+					self._logger.debug("Slack API message send response: " + str(apiRsp))
+				except Exception as e:
+					self._logger.exception("Slack API message send error: " + str(e))
+			elif not slackWebHookUrl == None and len(slackWebHookUrl) > 0:
+				slack_msg = {}
+				slack_msg['channel'] = channel
+	
+				if not slack_as_user == None:
+					slack_msg['as_user'] = slack_as_user
+				if not slack_icon_url == None and len(slack_icon_url) > 0:
+					slack_msg['icon_url'] = slack_icon_url
+				if not slack_icon_emoji == None and len(slack_icon_emoji) > 0:
+					slack_msg['icon_emoji'] = slack_icon_emoji
+				if not slack_username == None and len(slack_username) > 0:
+					slack_msg['username'] = slack_username
 
-			if not slack_as_user == None:
-				slack_msg['as_user'] = slack_as_user
-			if not slack_icon_url == None and len(slack_icon_url) > 0:
-				slack_msg['icon_url'] = slack_icon_url
-			if not slack_icon_emoji == None and len(slack_icon_emoji) > 0:
-				slack_msg['icon_emoji'] = slack_icon_emoji
-			if not slack_username == None and len(slack_username) > 0:
-				slack_msg['username'] = slack_username
+				slack_msg['attachments'] = attachments
+				self._logger.debug("Slack WebHook postMessage json: " + json.dumps(slack_msg))
+	
+				try:
+					webHook = IncomingWebhook(slackWebHookUrl)
+					webHookRsp = webHook.post(slack_msg)
 
-			slack_msg['attachments'] = attachments
-			self._logger.debug("Slack WebHook postMessage json: " + json.dumps(slack_msg))
-
-			try:
-				webHook = IncomingWebhook(slackWebHookUrl)
-				webHookRsp = webHook.post(slack_msg)
-
-				if not webHookRsp.ok:
-					self._logger.error("Slack WebHook message send failed: " + webHookRsp.text)
-			except Exception as e:
-				self._logger.exception("Slack WebHook message send error: " + str(e))
+					if not webHookRsp.ok:
+						self._logger.error("Slack WebHook message send failed: " + webHookRsp.text)
+				except Exception as e:
+					self._logger.exception("Slack WebHook message send error: " + str(e))
 
 	def upload_snapshot(self):
 		snapshot_upload_method = self._settings.get(['snapshot_upload_method'], merged=True)
@@ -1105,7 +1211,7 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 						self._logger.exception("Failed to upload snapshot to Imgur: " + str(e))
 						snapshot_errors.append("Imgur error: " + str(e))
 			except Exception as e:
-				self._logger.exception("Snapshot capture error: %s" % (str(e)))
+				self._logger.exception("Snapshot capture error: %s" % str(e))
 				snapshot_errors.append("Snapshot error: " + str(e.message))
 			finally:
 				if not local_file_path == None:
