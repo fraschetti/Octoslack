@@ -8,6 +8,7 @@ An OctoPrint plugin for monitoring your printer and prints via Slack or Mattermo
  - Respond to Slack commands to check print status or cancel/pause/resume a print
      - Requires use of the Slack API Token
  - Customizable messages
+ - Support for postingt to one more channels as well as event level channel overrides
  - Support for inclusion of RasPi temperature, bed temperature, nozzle temperates, and nozzle height
  - Custom bot name/icon/emoji
  - Optional inclusion of printer snapshot images with each message
