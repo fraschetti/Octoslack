@@ -41,6 +41,8 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 	##TODO FEATURE - Add support for Imgur image title + description
 	##TODO INTERNAL - Test on a Windows OctoPrint deployment to validate all necessary libs are available
 
+	##TODO FIX - Slack API -- WebHook only needs a restart if Slack API Token isn't empty
+
 
 	##~~ SettingsPlugin mixin
 
@@ -70,6 +72,8 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 			"imgur_config" : {
 				"client_id" : "",
 				"client_secret" : "",
+				"refresh_token" : "",
+				"album_id" : "",
 			},
 			"s3_config" : {
 				"AWSAccessKey" : "",
@@ -345,6 +349,7 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 			["imgur_config", "client_id"],
 			["imgur_config", "client_secret"],
 			["imgur_config", "refresh_token"],
+			["imgur_config", "album_id"],
 			["additional_snapshot_urls"],
 		])
 
@@ -1185,13 +1190,20 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 						imgur_client_refresh_token = imgur_config['refresh_token']
 						imgur_album_id = imgur_config['album_id']
 
-						if len(imgur_client_refresh_token.strip()) == 0:
+						if imgur_client_refresh_token == None or len(imgur_client_refresh_token.strip()) == 0:
 							imgur_client_refresh_token = None
+						else:
+							imgur_client_refresh_token = imgur_client_refresh_token.strip()
+
+						if imgur_album_id == None or len(imgur_album_id.strip()) == 0:
+							imgur_album_id = None
+						else:
+							imgur_album_id = imgur_album_id.strip()
 
 						imgur_client = ImgurClient(imgur_client_id, imgur_client_secret, None, imgur_client_refresh_token)
 
 						imgur_upload_config = { }
-						if not imgur_album_id == None and len(imgur_album_id) > 0:
+						if not imgur_album_id == None:
 							imgur_upload_config['album'] = imgur_album_id
 
 						##imgur_upload_config['title'] = 'ImageTitle123'
