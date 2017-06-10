@@ -41,8 +41,6 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 	##TODO FEATURE - Add support for Imgur image title + description
 	##TODO INTERNAL - Test on a Windows OctoPrint deployment to validate all necessary libs are available
 
-	##TODO FIX - Slack API -- WebHook only needs a restart if Slack API Token isn't empty
-
 
 	##~~ SettingsPlugin mixin
 

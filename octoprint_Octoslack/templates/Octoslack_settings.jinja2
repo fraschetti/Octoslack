@@ -63,9 +63,15 @@
             <br/>
             <div class="octoprint_config_row">
                 <span class="octoslack_label">API Token</span>
-                <input type="text" class="octoslack_width_auto" size="60" data-bind="value: settings.plugins.Octoslack.slack_apitoken_config.api_token">
+                <input type="text" class="octoslack_width_auto" id="octoslack_apitoken" size="60" data-bind="value: settings.plugins.Octoslack.slack_apitoken_config.api_token">
 		</br>
-		<small class="muted">An API Token can be generated via your Slack team's settings dialog. Apps &amp; integrations --&gt; Manage --&gt; Custom Integrations --&gt; Bots</small>
+		<small class="muted">
+                    An API Token can be generated via your Slack team's settings dialog.
+                    <br/>
+                    Apps &amp; integrations --&gt; Manage --&gt; Custom Integrations --&gt; Bots
+                    <br/>
+                    NOTE: Switching to or from the API Token connection method requires an OctoPrint restart to either establish or close the associated websocket connection
+                </small>
             </div>
 	    <div class="octoprint_config_row">
                 <input type="checkbox" class="octoslack_valign" id="octoslack_bot_commands" data-bind="checked: settings.plugins.Octoslack.slack_apitoken_config.enable_commands">
