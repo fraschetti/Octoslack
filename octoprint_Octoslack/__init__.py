@@ -427,7 +427,7 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 			progress_interval = int(self._settings.get(['supported_events'], merged=True).get('Progress').get('IntervalPct'))
 
 			if (progress % progress_interval == 0 and progress != 0) or progress == 100:
-				self.handle_event("Progress", None, {"progress":progress})
+				self.handle_event("Progress", None, {"progress":progress}, False)
 		except Exception as e:
 			self._logger.exception("Error processing progress event, Error: " + str(e.message))
 		
@@ -436,7 +436,7 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 
 	def progress_timer_tick(self):
 		self._logger.debug("Progress timer tick")
- 		self.handle_event("Progress", None, {})
+ 		self.handle_event("Progress", None, {}, False)
 
 	print_cancel_time = None
 	progress_timer = None
@@ -477,9 +477,9 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 		
 
 	def on_event(self, event, payload):
-		self.handle_event(event, None, payload)
+		self.handle_event(event, None, payload, False)
 
-	def handle_event(self, event, channel_override, payload):
+	def handle_event(self, event, channel_override, payload, override_event_enabled_check):
 		try:
 			if event == "PrintCancelled":
 				self.stop_progress_timer()
@@ -509,7 +509,7 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 			if event_settings == None:
 				return
 
-			event_enabled = event_settings['Enabled']
+			event_enabled = override_event_enabled_check or event_settings['Enabled']
 			if not event_enabled or event_enabled == False:
 				return
 
@@ -828,7 +828,7 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 		if self.bot_user_id == None or message == None:
 			return
 
-		if message["type"] == None or message["type"] != "message" or message["text"] == None:
+		if not "type" in message or message["type"] == None or message["type"] != "message" or message["text"] == None:
 			return
 
 		bot_id = "<@" + self.bot_user_id + ">"
@@ -851,7 +851,7 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 
 		if command == "help":
 			self._logger.debug("RTM - help command")
- 			self.handle_event("Help", channel, {})
+ 			self.handle_event("Help", channel, {}, True)
 			reaction = positive_reaction
 			
 		elif command == "stop":
@@ -879,7 +879,7 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 
 		elif command == "status":
 			self._logger.debug("RTM - status command")
- 			self.handle_event("Progress", channel, {})
+ 			self.handle_event("Progress", channel, {}, True)
 			reaction = positive_reaction
 
 		else:
