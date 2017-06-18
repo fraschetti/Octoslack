@@ -33,7 +33,7 @@ plugin_url = "https://github.com/fraschetti/Octoslack"
 plugin_license = "MIT"
 
 # Any additional requirements besides OctoPrint should be listed here
-plugin_requires = ['slackclient','slacker','tinys3','imgurpython','Pillow','humanize']
+plugin_requires = ['slackclient','slacker','tinys3','imgurpython','Pillow','humanize', 'minio']
 
 ### --------------------------------------------------------------------------------------------------------------------
 ### More advanced options that you usually shouldn't have to touch follow after this point

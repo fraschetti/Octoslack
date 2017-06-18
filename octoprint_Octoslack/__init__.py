@@ -26,7 +26,7 @@ import threading
 import requests
 import math
 import subprocess
-
+from minio import Minio
 
 class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
                       octoprint.plugin.AssetPlugin,
@@ -78,6 +78,13 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 				"AWSsecretKey" : "",
 				"s3Bucket" : "",
 				"file_expire_days" : -1,
+			},
+			"minio_config" : {
+				"AccessKey" : "",
+				"SecretKey" : "",
+				"Bucket" : "",
+				"endpoint": "",
+				"secure": True,
 			},
 			"additional_snapshot_urls" : "",
 			"snapshot_arrangement" : "HORIZONTAL", ##HORIZTONAL or VERTICAL or GRID
@@ -344,6 +351,11 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 			["s3_config", "AWSAccessKey"],
 			["s3_config", "AWSsecretKey"],
 			["s3_config", "s3Bucket"],
+			["minio_config", "AccessKey"],
+			["minio_config", "SecretKey"],
+			["minio_config", "Bucket"],
+			["minio_config", "Endpoint"],
+			["minio_config", "secure"],
 			["imgur_config", "client_id"],
 			["imgur_config", "client_secret"],
 			["imgur_config", "refresh_token"],
@@ -1174,6 +1186,40 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 						self._logger.debug("Uploaded snapshot to S3 in " + str(round(s3_upload_elapsed, 2)) + " seconds")
 
 						return "https://s3.amazonaws.com/octoslack/" + uploadFilename, snapshot_errors
+					except Exception as e:
+						self._logger.exception("Failed to upload snapshot to S3: " + str(e))
+						snapshot_errors.append("S3 error: " + str(e))
+				elif snapshot_upload_method == 'MINIO':
+					try:
+						minio_upload_start = time.time()
+
+						minio_config = self._settings.get(['minio_config'], merged=True)
+
+						minioAccessKey = minio_config['AccessKey']
+						minioSecretKey = minio_config['SecretKey']
+						minioBucket = minio_config['Bucket']
+						if minio_config['secure']:
+							minioURI = 'https://{endpoint}/{bucket}/'.format(endpoint=minio_config['Endpoint'],
+																			bucket=minioBucket)
+						else:
+							minioURI = 'http://{endpoint}/{bucket}/'.format(endpoint=minio_config['Endpoint'],
+																			bucket=minioBucket)
+						uploadFilename = "Snapshot_" + str(uuid.uuid1()).replace("-", "") + ".png"
+
+						minioClient = Minio(minio_config['Endpoint'],
+											access_key=minioAccessKey,
+											secret_key=minioSecretKey,
+											secure=minio_config['secure'])
+						minioUploadRsp = minioClient.fput_object(minioBucket,
+															  uploadFilename,
+															  local_file_path)
+
+						self._logger.debug("S3 upload response: " + str(minioUploadRsp))
+						minio_upload_elapsed = time.time() - minio_upload_start
+						self._logger.debug(
+							"Uploaded snapshot to Minio in " + str(round(minio_upload_elapsed, 2)) + " seconds")
+
+						return minioURI + uploadFilename, snapshot_errors
 					except Exception as e:
 						self._logger.exception("Failed to upload snapshot to S3: " + str(e))
 						snapshot_errors.append("S3 error: " + str(e))

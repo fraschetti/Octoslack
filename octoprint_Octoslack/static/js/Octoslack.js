@@ -166,9 +166,11 @@ var Octoslack = {
     changeSnapshotUploadMethod : function(selection) {
         var imgurGroup = $("#octoslack_imgur_group");
         var s3Group = $("#octolack_s3_group");
+        var minioGroup = $("#octolack_minio_group");
 
         imgurGroup.attr("class", "octoslack_hidden");
         s3Group.attr("class", "octoslack_hidden");
+        minioGroup.attr("class", "octoslack_hidden");
 
         switch (selection.value) {
             case "IMGUR":
@@ -176,6 +178,9 @@ var Octoslack = {
                 break;
             case "S3":
                 s3Group.attr("class", "octoslack_visible");
+                break;
+            case "MINIO":
+                minioGroup.attr("class", "octoslack_visible");
                 break;
         }
 
