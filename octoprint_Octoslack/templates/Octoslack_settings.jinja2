@@ -190,6 +190,12 @@
 	    <br/>
 	    <small class="muted">Leverage Amazon S3 (eventually will incur a cost) at  <a href="https://aws.amazon.com/free" target="_blank">https://aws.amazon.com/free</a></small>
         </div>
+        <div>
+            <input type="radio" name="octoslackSnapshotUploadMethod" id="octoslackSnapshotUploadMethod_minio" onclick="Octoslack.changeSnapshotUploadMethod(this);" class="octoslack_valign" value="MINIO">
+            <span class="octoslack_valign octoslack_action_label" onclick="$('#octoslackSnapshotUploadMethod_minio').trigger('click')">Minio S3</span>
+	    <br/>
+	    <small class="muted">Leverage Minio S3 compatible self hostable storage (see <a href="https://minio.io" target="_blank">Minio.io</a>)</small>
+        </div>
         <div id="octoslack_imgur_group" class="octoslack_hidden">
             <br/>
             <div class="octoprint_config_row">
@@ -273,6 +279,35 @@
                 <span class="octoslack_valign">days</span>
 	        <br/>
 	        <small class="muted">How long should AWS keep uploaded snapshots before they are automatically delted</small>
+            </div>
+        </div>
+        <div id="octolack_minio_group" class="octoslack_hidden">
+            <br/>
+            <div class="octoprint_config_row">
+                <span class="octoslack_label">Endpoing</span>
+                <input type="text" class="octoslack_width_auto" size="30" data-bind="value: settings.plugins.Octoslack.minio_config.Endpoint">
+            </div>
+            <div class="octoprint_config_row">
+                <span class="octoslack_label">Access Key</span>
+                <input type="text" class="octoslack_width_auto" size="30" data-bind="value: settings.plugins.Octoslack.minio_config.AccessKey">
+            </div>
+            <div class="octoprint_config_row">
+                <span class="octoslack_label">Secret Key</span>
+                <input type="text" class="octoslack_width_auto" size="60" data-bind="value: settings.plugins.Octoslack.minio_config.SecretKey">
+            </div>
+	    <small class="muted">See minio.io docs how to configure your credentials</small>
+	    <br/>
+	    <br/>
+            <div class="octoprint_config_row">
+                <span class="octoslack_label">Minio/S3 Bucket</span>
+                <input type="text" name="octoslack_minio_bucket" id="octoslack_imgur_clientid" class="octoslack_width_auto" size="20" data-bind="value: settings.plugins.Octoslack.minio_config.Bucket">
+            </div>
+	    <small class="muted">The Minio/S3 bucket where snapshots should be stored</small>
+	    <br/>
+	    <br/>
+            <div class="octoprint_config_row">
+                <input type="checkbox" class="octoslack_valign" id="octoslack_minio_secure" data-bind="checked: settings.plugins.Octoslack.minio_config.secure">
+                <div class="octoslack_label octoslack_action_label" onclick="$('#octoslack_minio_secure').trigger('click')">Secure Connection</div>
             </div>
         </div>
 	<br/>
