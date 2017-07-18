@@ -39,8 +39,12 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 	##TODO FEATURE - generate an animated gif of the print - easy enough if we can find a python ib to create the gif (images2gif is buggy & moviepy, imageio, and and visvis which rely on numpy haven't worked out as I never neven let numpy try to finish installing after 5/10 minutes on my RasPi3)
 	##TODO FEATURE - add the timelapse gallery for cancelled/failed/completed as a single image
 	##TODO FEATURE - Add support for Imgur image title + description
-	##TODO INTERNAL - Test on a Windows OctoPrint deployment to validate all necessary libs are available
-
+	##TODO ENHANCEMENT - Strip newlines from start/end of octoprint error messages (Printer: XYZ message)
+	##TODO FEATURE - Optionally upload timelapse video to youtube & send a Slack message when the upload is complete
+	##TODO ENHANCEMENT - Check every N minutes if Slack RTM client has received any data. Reconnect if it hasn't
+	##TODO FEATURE - Add alerts based on GCode sent from OctoPrint (e.g. M600 color change for the Marlin firmware)
+	##TODO ENHANCEMENT - Add a 'processing' emoji for the status command which may take some time to complete
+	##TODO ENHANCEMENT - Remove the need to restart OctoPrint when switching between the Slack API and WebHook
 
 	##~~ SettingsPlugin mixin
 
@@ -820,11 +824,14 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 				self._logger.debug("Successfully connected via RTM API")
 
 				while self.rtm_keep_running:
-					read_msgs = sc.rtm_read()
-					if not read_msgs == None and len(read_msgs) > 0:
-						for msg in read_msgs:
-							self.process_rtm_message(slackAPIToken, msg)
-					time.sleep(1)
+					try:
+						read_msgs = sc.rtm_read()
+						if not read_msgs == None and len(read_msgs) > 0:
+							for msg in read_msgs:
+								self.process_rtm_message(slackAPIToken, msg)
+						time.sleep(1)
+					except Exception as e:
+						self._logger.error("RPM API read error: " + str(e.message))
 			else:
 				self._logger.error("Failed to connect via RTM API")
 
