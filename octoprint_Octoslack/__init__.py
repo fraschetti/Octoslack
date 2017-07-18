@@ -1214,15 +1214,15 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 															  uploadFilename,
 															  local_file_path)
 
-						self._logger.debug("S3 upload response: " + str(minioUploadRsp))
+						self._logger.debug("Minio upload response: " + str(minioUploadRsp))
 						minio_upload_elapsed = time.time() - minio_upload_start
 						self._logger.debug(
 							"Uploaded snapshot to Minio in " + str(round(minio_upload_elapsed, 2)) + " seconds")
 
 						return minioURI + uploadFilename, snapshot_errors
 					except Exception as e:
-						self._logger.exception("Failed to upload snapshot to S3: " + str(e))
-						snapshot_errors.append("S3 error: " + str(e))
+						self._logger.exception("Failed to upload snapshot to Minio: " + str(e))
+						snapshot_errors.append("Minio error: " + str(e))
 				elif snapshot_upload_method == "IMGUR":
 					try:
 						imgur_upload_start = time.time()
@@ -1263,8 +1263,11 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 					
 						imgurUrl = imgurUploadRsp['link']
 						return imgurUrl, snapshot_errors
+					except ImgurClientError as ie:
+						self._logger.exception("Failed to upload snapshot to Imgur (ImgurClientError): " + str(ie.error_message) + ", StatusCode: " + str(ie.status_code))
+						snapshot_errors.append("Imgur error: " + str(ie.error_message))
 					except Exception as e:
-						self._logger.exception("Failed to upload snapshot to Imgur: " + str(e))
+						self._logger.exception("Failed to upload snapshot to Imgur (Exception): " + str(e))
 						snapshot_errors.append("Imgur error: " + str(e))
 			except Exception as e:
 				self._logger.exception("Snapshot capture error: %s" % str(e))
