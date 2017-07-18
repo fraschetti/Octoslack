@@ -107,12 +107,13 @@ var Octoslack = {
  	var restart_needed = false;
 
 	var new_bot_commands = $("#octoslack_bot_commands").is(":checked");
+	var apitoken_set = $('#octoslack_apitoken').val().trim().length > 0;
 
-	if(this.last_connection_method == "APITOKEN" && (this.last_bot_commands != new_bot_commands))
+	if(this.last_connection_method == "APITOKEN" && apitoken_set && (this.last_bot_commands != new_bot_commands))
 		restart_needed = true;
-	else if(this.last_connection_method == "APITOKEN" && new_connection_method != "APITOKEN" && this.last_bot_commands)
+	else if(this.last_connection_method == "APITOKEN" && new_connection_method != "APITOKEN" && apitoken_set && this.last_bot_commands)
 		restart_needed = true;
-	else if(this.last_connection_method != "APITOKEN" && new_connection_method == "APITOKEN" && new_bot_commands)
+	else if(this.last_connection_method != "APITOKEN" && new_connection_method == "APITOKEN" && apitoken_set && new_bot_commands)
 		restart_needed = true;
 
 	this.last_connection_method = $("#octoslack_connection_method_hidden").val();
