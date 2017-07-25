@@ -6,9 +6,11 @@ from datetime import timedelta
 from slackclient import SlackClient
 from slacker import Slacker,IncomingWebhook
 from imgurpython import ImgurClient
-from imgurpython.helpers.error import ImgurClientError
+from imgurpython.helpers.error import ImgurClientError,ImgurClientRateLimitError
 from PIL import Image
 from octoprint.util import RepeatedTimer
+from websocket import WebSocketConnectionClosedException
+from minio import Minio
 import octoprint.util
 import octoprint.plugin
 import urllib2
@@ -16,6 +18,7 @@ import datetime
 import base64
 import json
 import os
+import os.path
 import uuid
 import time
 import datetime
@@ -26,7 +29,7 @@ import threading
 import requests
 import math
 import subprocess
-from minio import Minio
+
 
 class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
                       octoprint.plugin.AssetPlugin,
@@ -39,12 +42,11 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 	##TODO FEATURE - generate an animated gif of the print - easy enough if we can find a python ib to create the gif (images2gif is buggy & moviepy, imageio, and and visvis which rely on numpy haven't worked out as I never neven let numpy try to finish installing after 5/10 minutes on my RasPi3)
 	##TODO FEATURE - add the timelapse gallery for cancelled/failed/completed as a single image
 	##TODO FEATURE - Add support for Imgur image title + description
-	##TODO ENHANCEMENT - Strip newlines from start/end of octoprint error messages (Printer: XYZ message)
 	##TODO FEATURE - Optionally upload timelapse video to youtube & send a Slack message when the upload is complete
 	##TODO ENHANCEMENT - Check every N minutes if Slack RTM client has received any data. Reconnect if it hasn't
 	##TODO FEATURE - Add alerts based on GCode sent from OctoPrint (e.g. M600 color change for the Marlin firmware)
-	##TODO ENHANCEMENT - Add a 'processing' emoji for the status command which may take some time to complete
 	##TODO ENHANCEMENT - Remove the need to restart OctoPrint when switching between the Slack API and WebHook
+	##TODO FEATURE - Define a third set of messages for each event to allow sending M117 commands to the printer
 
 	##~~ SettingsPlugin mixin
 
@@ -56,6 +58,7 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 				"enable_commands" : True,
 				"commands_positive_reaction" : ":thumbsup:",
 				"commands_negative_reaction" : ":thumbsdown:",
+				"commands_processing_reaction" : ":stopwatch:",
 			},
 			"slack_webhook_config" : {
 				"webhook_url" : "",
@@ -421,9 +424,9 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 	##~~ StartupPlugin mixin
 
 	def on_after_startup(self):
-        	self._logger.debug("Starting RTM client")
+        	self._logger.debug("Starting Slack RTM client")
 		self.start_rtm_client()
-        	self._logger.debug("Started RTM client")
+        	self._logger.debug("Started Slack RTM client")
 
 
 	##~~ ShutdownPlugin mixin
@@ -431,7 +434,7 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 	def on_shutdown(self):
 		self.stop_rtm_client()
 
-        	self._logger.debug("Stopped RTM client")
+        	self._logger.debug("Stopped Slack RTM client")
 
 
 	##~~ PrintProgress mixin
@@ -689,7 +692,10 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 						
 						temp_str += ", " + nozzle_name + ": " + str(printer_temps[key]['actual']) + unichr(176) + "C/" + str(printer_temps[key]['target']) + unichr(176) + "C"
 
-			footer = "Printer: " + printer_state['text'] + temp_str + z_height_str
+			printer_text = printer_state['text']
+			if not printer_text == None:
+				printer_text = printer_text.strip()
+			footer = "Printer: " + printer_text + temp_str + z_height_str
 
 
 		if self._settings.get(['include_raspi_temp'], merged=True):
@@ -743,8 +749,10 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 
 		error = None
 		if 'error' in event_payload:
-			_error = event_payload['error']
+			error = event_payload['error']
 		if not error == None:
+			error = error.strip()
+		if not error == None and len(error) > 0:
 			text_arr.append(self.bold_text() + "Error" + self.bold_text() + " " + error)
 			replacement_params['{error}'] = error
 
@@ -788,7 +796,7 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 			return
 		slackAPIToken = slackAPIToken.strip()
 
-		self._logger.debug("Before RTM client start")
+		self._logger.debug("Before Slack RTM client start")
 
 		self.rtm_keep_running = True
 		self.bot_user_id = None
@@ -797,10 +805,10 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
                 t.setDaemon(True)
                 t.start()
 
-		self._logger.debug("After RTM client start")
+		self._logger.debug("After Slack RTM client start")
 
 	def stop_rtm_client(self):
-		self._logger.debug("Stopping RTM client")
+		self._logger.debug("Stopping Slack RTM client")
 		self.rtm_keep_running = False
 
 	def execute_rtm_loop(self, slackAPIToken):
@@ -815,28 +823,42 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 				return
 
 			self.bot_user_id = auth_rsp.body["user_id"]
-			self._logger.debug("Bot user id: " + self.bot_user_id)
+			self._logger.debug("Slack RTM Bot user id: " + self.bot_user_id)
 
-			self._logger.debug("Starting RTM wait loop")
+			self._logger.debug("Starting Slack RTM wait loop")
 			sc = SlackClient(slackAPIToken)
 
 			if sc.rtm_connect():
-				self._logger.debug("Successfully connected via RTM API")
+				self._logger.debug("Successfully connected via Slack RTM API")
 
 				while self.rtm_keep_running:
 					try:
 						read_msgs = sc.rtm_read()
 						if not read_msgs == None and len(read_msgs) > 0:
 							for msg in read_msgs:
-								self.process_rtm_message(slackAPIToken, msg)
+								try:
+									self.process_rtm_message(slackAPIToken, msg)
+								except Exception as e:
+									self._logger.error("RPM message processing error: " + str(e.message))
 						time.sleep(1)
+					except WebSocketConnectionClosedException as ce:
+						self._logger.error("RPM API read error (WebSocketConnectionClosedException): " + str(e.message))
+						time.sleep(1 * 1000)
+
+						##Reinitialize the connection
+						sc = SlackClient(slackAPIToken)
+						sc.rtm_connect()
+						if not sc.rtm_connect():
+							self._logger.error("Failed to connect via Slack RTM API")
+							break
 					except Exception as e:
-						self._logger.error("RPM API read error: " + str(e.message))
+						self._logger.error("RPM API read error (Exception): " + str(e.message))
+						time.sleep(5 * 1000)
 			else:
-				self._logger.error("Failed to connect via RTM API")
+				self._logger.error("Failed to connect via Slack RTM API")
 
 		
-			self._logger.debug("Finished RTM wait loop")
+			self._logger.debug("Finished Slack RTM wait loop")
 		except Exception as e:
 			self._logger.exception("Error in rtm loop, Error: " + str(e.message))
 
@@ -855,7 +877,7 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 		if not bot_id in message["text"]:
 			return
 
-		self._logger.debug("RTM Read: " + json.dumps(message))
+		self._logger.debug("Slack RTM Read: " + json.dumps(message))
 
 		channel = message["channel"]
 		timestamp = message["ts"]
@@ -866,58 +888,108 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 
 		positive_reaction = self._settings.get(['slack_apitoken_config'], merged=True).get('commands_positive_reaction')
 		negative_reaction = self._settings.get(['slack_apitoken_config'], merged=True).get('commands_negative_reaction')
-		
+		processing_reaction = self._settings.get(['slack_apitoken_config'], merged=True).get('commands_processing_reaction')
+
+		if not positive_reaction == None:
+			positive_reaction = positive_reaction.strip()
+			if positive_reaction.startswith(':') and positive_reaction.endswith(':'):
+				positive_reaction = positive_reaction[1:-1].strip()
+
+		if not negative_reaction == None:
+			negative_reaction = negative_reaction.strip()
+			if negative_reaction.startswith(':') and negative_reaction.endswith(':'):
+				negative_reaction = negative_reaction[1:-1].strip()
+
+		if not processing_reaction == None:
+			processing_reaction = processing_reaction.strip()
+			if processing_reaction.startswith(':') and processing_reaction.endswith(':'):
+				processing_reaction = processing_reaction[1:-1].strip()
+
+		sent_processing_reaction = False
 
 		if command == "help":
-			self._logger.debug("RTM - help command")
+			self._logger.debug("Slack RTM - help command")
  			self.handle_event("Help", channel, {}, True)
 			reaction = positive_reaction
 			
 		elif command == "stop":
-			self._logger.debug(" RTM - stop command")
+			self._logger.debug("Slack RTM - stop command")
 			if self._printer.is_printing():
+				##Send processing reaction
+				sent_processing_reaction = True
+				self.add_message_reaction(slackAPIToken, channel, timestamp, processing_reaction, False)
+
 				self._printer.cancel_print()
 				reaction = positive_reaction
 			else:
 				reaction = negative_reaction
 		elif command == "pause":
-			self._logger.debug("RTM - pause command")
+			self._logger.debug("Slack RTM - pause command")
 			if self._printer.is_printing():
-				self._printer.toggle_pause_print()
-				reaction = positive_reaction
-			else:
-				reaction = negative_reaction
-			
-		elif command == "resume":
-			self._logger.debug("RTM - resume command")
-			if self._printer.is_paused():
-				self._printer.toggle_pause_print()
-				reaction = positive_reaction
-			else:
-				reaction = negative_reaction
+				##Send processing reaction
+				sent_processing_reaction = True
 
+				self.add_message_reaction(slackAPIToken, channel, timestamp, processing_reaction, False)
+				self._printer.toggle_pause_print()
+				reaction = positive_reaction
+			else:
+				reaction = negative_reaction
+		elif command == "resume":
+			self._logger.debug("Slack RTM - resume command")
+			if self._printer.is_paused():
+				##Send processing reaction
+				sent_processing_reaction = True
+				self.add_message_reaction(slackAPIToken, channel, timestamp, processing_reaction, False)
+
+				self._printer.toggle_pause_print()
+				reaction = positive_reaction
+			else:
+				reaction = negative_reaction
 		elif command == "status":
-			self._logger.debug("RTM - status command")
+			##Send processing reaction
+			self._logger.debug("Slack RTM - status command")
+			sent_processing_reaction = True
+
+			self.add_message_reaction(slackAPIToken, channel, timestamp, processing_reaction, False)
  			self.handle_event("Progress", channel, {}, True)
 			reaction = positive_reaction
 
 		else:
 			reaction = negative_reaction
 
-		if not reaction == None:
-			reaction = reaction.strip()
-			if reaction.startswith(':') and reaction.endswith(':'):
-				reaction = reaction[1:-1]
 
-		if not reaction == None and len(reaction.strip()) > 0:
+		self.add_message_reaction(slackAPIToken, channel, timestamp, reaction, False)
+
+		##Remove the processing reaction if it was previously added
+		if sent_processing_reaction:
+			self.add_message_reaction(slackAPIToken, channel, timestamp, processing_reaction, True)
+
+
+	def add_message_reaction(self, slackAPIToken, channel, timestamp, reaction, remove):
+		try:
+			if reaction == None:
+				return
+
 			reaction = reaction.strip()
 
-			self._logger.debug("send reaction")
+			if len(reaction) == 0:
+				return
+
 			slackAPIConnection = Slacker(slackAPIToken)
+	
+			self._logger.debug("Sending Slack RTM reaction - Channel: " + channel + ", Timestamp: " + timestamp + ", Reaction: " + reaction + ", Remove: " + str(remove))
 
-			reaction_rsp = slackAPIConnection.reactions.add(channel=channel, timestamp=timestamp, name=reaction)
+			if remove:
+				reaction_rsp = slackAPIConnection.reactions.remove(channel=channel, timestamp=timestamp, name=reaction)
+			else:
+				reaction_rsp = slackAPIConnection.reactions.add(channel=channel, timestamp=timestamp, name=reaction)
+
 			if reaction_rsp.successful == None or reaction_rsp.successful == False:
-				self._logger.error("Add command reaction failed: " + json.dumps(reaction_rsp.body))
+				self._logger.debug("Slack RTM send reaction failed - Channel: " + channel + ", Timestamp: " + timestamp + ", Reaction: " + reaction + ", Remove: " + str(remove) + json.dumps(reaction_rsp.body))
+			else:
+				self._logger.debug("Successfully sent Slack RTM reaction - Channel: " + channel + ", Timestamp: " + timestamp + ", Reaction: " + reaction + ", Remove: " + str(remove))
+		except Exception as e:
+			self._logger.exception("Error sending Slack RTM reaction - Channel: " + channel + ", Timestamp: " + timestamp + ", Reaction: " + reaction + ", Remove: " + str(remove) + ", Error: " + str(e.message))
 
 	def mattermost_mode(self):
 		return self._settings.get(['mattermost_compatability_mode'], merged=True)
@@ -1085,7 +1157,14 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 			attachment['text'] = text
 
 		attachments_json = json.dumps(attachments)
-		self._logger.debug("Slack API postMessage json: " + attachments_json)
+
+		channels = channel_override
+		if channels == None or len(channels.strip()) == 0:
+			channels = self._settings.get(['channel'], merged=True)
+		if not channels:
+			channels = ''
+
+		self._logger.debug("Slack API postMessage - Channels: " + channels + ", JSON: " + attachments_json)
 
 		slack_identity_config = self._settings.get(['slack_identity'], merged=True)
 		slack_as_user = slack_identity_config['existing_user']
@@ -1100,14 +1179,6 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 				slack_icon_emoji = slack_identity_config['icon_emoji']
 			if 'username' in slack_identity_config:
 				slack_username = slack_identity_config['username']
-
-		channels = channel_override
-		if channels == None or len(channels.strip()) == 0:
-			channels = self._settings.get(['channel'], merged=True)
-		if not channels:
-			channels = ''
-
-		self._logger.debug("Channels: " + channels)
 	
 		for channel in channels.split(","):
 			channel = channel.strip()
@@ -1126,7 +1197,7 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 						icon_url=slack_icon_url,
 						icon_emoji=slack_icon_emoji)
 
-					self._logger.debug("Slack API message send response: " + str(apiRsp))
+					self._logger.debug("Slack API message send response: " + apiRsp.raw)
 				except Exception as e:
 					self._logger.exception("Slack API message send error: " + str(e))
 			elif not slackWebHookUrl == None and len(slackWebHookUrl) > 0:
@@ -1169,6 +1240,8 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 				snapshot_upload_method = self._settings.get(['snapshot_upload_method'], merged=True)
 				if snapshot_upload_method == 'S3':
 					try:
+						self._logger.debug("Uploading snapshot via S3")
+
 						s3_upload_start = time.time()
 
 						s3_config = self._settings.get(['s3_config'], merged=True)
@@ -1198,6 +1271,8 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 						snapshot_errors.append("S3 error: " + str(e))
 				elif snapshot_upload_method == 'MINIO':
 					try:
+						self._logger.debug("Uploading snapshot via Minio")
+
 						minio_upload_start = time.time()
 
 						minio_config = self._settings.get(['minio_config'], merged=True)
@@ -1232,6 +1307,8 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 						snapshot_errors.append("Minio error: " + str(e))
 				elif snapshot_upload_method == "IMGUR":
 					try:
+						self._logger.debug("Uploading snapshot via Imgur")
+
 						imgur_upload_start = time.time()
 
 						imgur_config = self._settings.get(['imgur_config'], merged=True)
@@ -1252,6 +1329,7 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 							imgur_album_id = imgur_album_id.strip()
 
 						imgur_client = ImgurClient(imgur_client_id, imgur_client_secret, None, imgur_client_refresh_token)
+						self.tmp_imgur_client = imgur_client
 
 						imgur_upload_config = { }
 						if not imgur_album_id == None:
@@ -1260,7 +1338,7 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 						##imgur_upload_config['title'] = 'ImageTitle123'
 						##imgur_upload_config['description'] = 'ImageDescription123'
 
-						self._logger.debug("Imgur upload config: " + str(imgur_upload_config))
+						self._logger.debug("Uploading to Imgur - Config: " + str(imgur_upload_config) + ", File path: " + local_file_path + ", File exists: " + str(os.path.isfile(local_file_path)))
 
 						imgurUploadRsp = imgur_client.upload_from_path(local_file_path, config=imgur_upload_config, anon=False)
 						self._logger.debug("Imgur upload response: " + str(imgurUploadRsp))
@@ -1272,7 +1350,11 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 						return imgurUrl, snapshot_errors
 					except ImgurClientError as ie:
 						self._logger.exception("Failed to upload snapshot to Imgur (ImgurClientError): " + str(ie.error_message) + ", StatusCode: " + str(ie.status_code))
+						self._logger.exception("ImgurError: " + str(self.tmp_imgur_client.credits))
 						snapshot_errors.append("Imgur error: " + str(ie.error_message))
+					except ImgurClientRateLimitError as rle:
+						self._logger.exception("Failed to upload snapshot to Imgur (ImgurClientRateLimitError): " + str(e))
+						snapshot_errors.append("Imgur error: " + str(e))
 					except Exception as e:
 						self._logger.exception("Failed to upload snapshot to Imgur (Exception): " + str(e))
 						snapshot_errors.append("Imgur error: " + str(e))

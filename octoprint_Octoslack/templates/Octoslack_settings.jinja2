@@ -115,6 +115,12 @@
 		<small class="muted">If commands are enabled, this emoji is added as a reaction to valid commands</small>
             </div>
             <div class="octoprint_config_row">
+                <span class="octoslack_label">Processing emoji</span>
+                <input type="text" class="octoslack_width_auto" size="15" data-bind="value: settings.plugins.Octoslack.slack_apitoken_config.commands_processing_reaction">
+                <br/>
+		<small class="muted">If commands are enabled, this emoji is added as a reaction before the actual command is executed to give the user some initial feedback while a potentially long running command is executing (e.g. capturing, processing, and uploading a snapshot)</small>
+            </div>
+            <div class="octoprint_config_row">
                 <span class="octoslack_label">Failure emoji</span>
                 <input type="text" class="octoslack_width_auto" size="15" data-bind="value: settings.plugins.Octoslack.slack_apitoken_config.commands_negative_reaction">
                 <br/>
