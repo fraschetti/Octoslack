@@ -9,27 +9,32 @@ $(function() {
         var self = this;
 
         self.onStartup = function() {
-                Octoslack.beforeBindingInit();
+            Octoslack.onStartup();
         };
 
         self.onAfterBinding = function() {
-                Octoslack.afterBindingInit();
+            Octoslack.afterBindingInit();
         };
 
 	self.onEventSettingsUpdated  = function() {
-		Octoslack.afterSettingsSaved();
+            Octoslack.afterSettingsSaved();
 	};
+
+        self.onSettingsBeforeSave = function() {
+            Octoslack.beforeSave();
+        };
     }
 
     // view model class, parameters for constructor, container to bind to
     OCTOPRINT_VIEWMODELS.push([
-        OctoslackViewModel, ["settingsViewModel"], [ ]
+        OctoslackViewModel,
+        ["settingsViewModel"]
     ]);
 });
 
 var Octoslack = {
 
-    beforeBindingInit : function() {
+    onStartup : function() {
 	this.buildOctoPrintEventConfigs();
     },
 
@@ -39,6 +44,7 @@ var Octoslack = {
     afterBindingInit : function() {
         this.setInitialInputStates();
         this.buildSnapshotURLsTable();
+        this.buildGcodeEventsTable();
 	this.applyMattermostChanges();
 
 	this.last_connection_method = $("#octoslack_connection_method_hidden").val();
@@ -86,6 +92,10 @@ var Octoslack = {
 		$('#octoslack_custom_identity_icon_emoji').removeAttr('disabled');
 
 	}
+    },
+
+    beforeSave : function() {
+        this.storeGcodeEvents();
     },
 
     afterSettingsSaved : function() {
@@ -273,49 +283,132 @@ var Octoslack = {
                 message: message
         });
     },
-
     buildOctoPrintEventConfigs : function() {
 	var events = [
-		[ "PrintStarted", "Print started" ],
-		[ "PrintFailed", "Print failed" ],
-		[ "PrintCancelled", "Print cancelled" ],
-		[ "PrintPaused", "Print paused" ],
-		[ "PrintResumed", "Print resumed" ],
-		[ "PrintDone", "Print finished" ],
-		[ "Progress", "Print progress" ],
-		[ "MovieRendering", "Timelapse render started" ],
-		[ "MovieDone", "Timelapse render finished" ],
-		[ "MovieFailed", "Timelapse render failed" ],
-		[ "Error", "OctoPrint error" ],
-		[ "Startup", "OctoPrint started" ],
-		[ "Shutdown", "OctoPrint stopped" ],
-		[ "Connecting", "Printer connecting" ],
-		[ "Connected", "Printer connected" ],
-		[ "Disconnecting", "Printer disconnecting" ],
-		[ "Disconnected", "Printer disconnected" ],
+		{ "InternalName" : "PrintStarted", "DisplayName" : "Print started" },
+		{ "InternalName" : "PrintFailed", "DisplayName" : "Print failed" },
+		{ "InternalName" : "PrintCancelled", "DisplayName" : "Print cancelled" },
+		{ "InternalName" : "PrintPaused", "DisplayName" : "Print paused" },
+		{ "InternalName" : "PrintResumed", "DisplayName" : "Print resumed" },
+		{ "InternalName" : "PrintDone", "DisplayName" : "Print finished" },
+		{ "InternalName" : "Progress", "DisplayName" : "Print progress" },
+		{ "InternalName" : "MovieRendering", "DisplayName" : "Timelapse render started" },
+		{ "InternalName" : "MovieDone", "DisplayName" : "Timelapse render finished" },
+		{ "InternalName" : "MovieFailed", "DisplayName" : "Timelapse render failed" },
+		{ "InternalName" : "Error", "DisplayName" : "OctoPrint error" },
+		{ "InternalName" : "Startup", "DisplayName" : "OctoPrint started" },
+		{ "InternalName" : "Shutdown", "DisplayName" : "OctoPrint stopped" },
+		{ "InternalName" : "Connecting", "DisplayName" : "Printer connecting" },
+		{ "InternalName" : "Connected", "DisplayName" : "Printer connected" },
+		{ "InternalName" : "Disconnecting", "DisplayName" : "Printer disconnecting" },
+		{ "InternalName" : "Disconnected", "DisplayName" : "Printer disconnected" },
 	];
+
+	var eventsHtml = this.buildOctoPrintEventConfigRow('STANDARD', events, null, null);
+        
+        var events_container = $("#octoslack_events_container");
+        events_container.attr("class", "octoslack_visible");
+        events_container.html(eventsHtml);
+    },
+
+    updateGcodeEventTitle : function(elem) {
+        var titleElemId = elem.getAttribute('titleelem');
+        if (titleElemId == undefined) return;
+
+        var titleElem = $("#" + titleElemId);
+        if (titleElem == undefined) return;
+
+        var newTitle = elem.value.trim();
+        if (newTitle.length == 0)
+            newTitle = "...";
+
+        titleElem.text(newTitle);
+    },
+
+    buildOctoPrintEventConfigRow : function(eventType, events, action_text, action_handler) {
+
+        var useDataBind = false;
 
 	var eventHtml = [];
 
+        if(events == null || events == undefined)
+            events = [];
+
 	for(var i = 0; i < events.length; i++) {
 	    var event = events[i];
-	    var internalName = event[0];
-	    var displayName = event[1];
 
-	    eventHtml.push("        <h3>" + this.escapeHtml(displayName) + "</h3>");
-            
+	    var internalName = event.InternalName;
+            var customEnabled = false;
+            var customChannelOverride = "";
+            var customCaptureSnapshot = false;
+            var customMessage = "";
+            var customFallback = "";
+
+            if(eventType == "STANDARD") {
+                useDataBind = true;
+	        var displayName = event.DisplayName;
+	        eventHtml.push("        <h3>" + this.escapeHtml(displayName) + "</h3>");
+            }
+
+            var rowContainerId = eventType + "_" + internalName + "_row";
+
+	    eventHtml.push("        <div id='" + rowContainerId + "' internalname='" + internalName + "'>");
+
+            if(eventType == "GCODE") {
+	        var gcode = event.Gcode;
+                var customColor = event.Color
+                customEnabled = event.Enabled;
+                customChannelOverride = event.ChannelOverride;
+                customCaptureSnapshot = event.CaptureSnapshot;
+                customMessage = event.Message;
+                customFallback = event.Fallback;
+
+                if(gcode == undefined)
+                    gcode = "";
+	        eventHtml.push("        <h3><span id='octoslack_event_" + internalName + "_gcode_title'>" + this.escapeHtml(gcode.trim().length == 0 ? "..." : gcode) + "</span></h3>");
+            }
+
             //Enabled
 	    eventHtml.push("        <div class='octoprint_config_row'>");
-	    eventHtml.push("            <input type='checkbox' class='octoslack_valign' id='octoslack_event_" + internalName + "_enabled' data-bind='checked: settings.plugins.Octoslack.supported_events." + internalName + ".Enabled'>");
+	    eventHtml.push("            <input type='checkbox' class='octoslack_valign' id='octoslack_event_" + internalName + "_enabled' "
+                + (useDataBind ? "data-bind='checked: settings.plugins.Octoslack.supported_events." + internalName + ".Enabled'" : "")
+                + (customEnabled ? " checked " : " ")
+                + ">");
 	    eventHtml.push("            <div class='octoslack_label octoslack_action_label' onclick=\"$('#octoslack_event_" + internalName + "_enabled').trigger('click')\">Enabled</div>");
 	    eventHtml.push("        </div>");
 
+            if(eventType == "GCODE") {
+	        var gcode = event.Gcode;
+                if(gcode == undefined)
+                    gcode = "";
 
-            if(internalName == "Progress") {
+                //Gcode
+	        eventHtml.push("        <div class='octoprint_config_row'>");
+	        eventHtml.push("            <input type='text' size='30' id='octoslack_event_" + internalName + "_gcode' onkeydown='Octoslack.updateGcodeEventTitle(this);' onpaste='Octoslack.updateGcodeEventTitle(this);' oninput='Octoslack.updateGcodeEventTitle(this);' onchange='Octoslack.updateGcodeEventTitle(this);' "
+                    + (useDataBind ? "data-bind='value: settings.plugins.Octoslack.supported_events." + internalName + ".Gcode'" : "") 
+                    + " value='" + this.escapeHtml(gcode.trim()) + "'"
+                    + " titleelem='octoslack_event_" + internalName + "_gcode_title'>");
+	        eventHtml.push("            <div class='octoslack_label octoslack_action_label'>G-code</div>");
+	        eventHtml.push("        </div>");
+
+                //Color
+	        eventHtml.push("        <div class='octoprint_config_row'>");
+	        eventHtml.push("            <select class='octoslack_select' id='octoslack_event_" + internalName + "_color'>");
+	        eventHtml.push("                <option value='good'" + (customColor == 'good' ? ' selected' : '') + ">OK</option>");
+	        eventHtml.push("                <option value='warning'" + (customColor == 'warning' ? ' selected' : '') + ">Warning</option>");
+	        eventHtml.push("                <option value='danger'" + (customColor == 'danger' ? ' selected' : '') + ">Error</option>");
+	        eventHtml.push("            </select>");
+	        eventHtml.push("            <div class='octoslack_label'>Status level</div>");
+	        eventHtml.push("        </div>");
+            }
+
+            if(eventType == "STANDARD" && internalName == "Progress") {
                 //IntervalPct
 	        eventHtml.push("        <div class='octoprint_config_row'>");
-	        eventHtml.push("            <input type='number' step='any' min='0' max='99' class='input-mini text-right' id='octoslack_event_" + internalName + "_message' data-bind='value: settings.plugins.Octoslack.supported_events." + internalName + ".IntervalPct'>");
-	        eventHtml.push("            <div class='octoslack_label octoslack_action_label' onclick=\"$('#octoslack_event_" + internalName + "_message').trigger('click')\">Interval - Percentage</div>");
+	        eventHtml.push("            <input type='number' step='any' min='0' max='99' class='input-mini text-right' id='octoslack_event_" + internalName + "_InvervalPct' "
+                    + (useDataBind ? "data-bind='value: settings.plugins.Octoslack.supported_events." + internalName + ".IntervalPct'" : "")
+                    + ">");
+	        eventHtml.push("            <div class='octoslack_label octoslack_action_label'>Interval - Percentage</div>");
 	        eventHtml.push("            <br/>");
 	        eventHtml.push("            <small class='muted'>");
 	        eventHtml.push("                0 = disabled");
@@ -328,8 +421,10 @@ var Octoslack = {
 
                 //IntervalTime
 	        eventHtml.push("        <div class='octoprint_config_row'>");
-	        eventHtml.push("            <input type='number' step='any' min='0' class='input-mini text-right' id='octoslack_event_" + internalName + "_message' data-bind='value: settings.plugins.Octoslack.supported_events." + internalName + ".IntervalTime'>");
-	        eventHtml.push("            <div class='octoslack_label octoslack_action_label' onclick=\"$('#octoslack_event_" + internalName + "_message').trigger('click')\">Interval - Time (Minutes)</div>");
+	        eventHtml.push("            <input type='number' step='any' min='0' class='input-mini text-right' id='octoslack_event_" + internalName + "_IntervalTime' "
+                    + (useDataBind ? "data-bind='value: settings.plugins.Octoslack.supported_events." + internalName + ".IntervalTime'" : "")
+                    + ">");
+	        eventHtml.push("            <div class='octoslack_label octoslack_action_label'>Interval - Time (Minutes)</div>");
 	        eventHtml.push("            <br/>")
 	        eventHtml.push("            <small class='muted'>");
 	        eventHtml.push("                0 = disabled");
@@ -342,35 +437,49 @@ var Octoslack = {
 
             //ChannelOverride
 	    eventHtml.push("        <div class='octoprint_config_row'>");
-	    eventHtml.push("            <input type='text' size='30' id='octoslack_event_" + internalName + "_message' data-bind='value: settings.plugins.Octoslack.supported_events." + internalName + ".ChannelOverride'>");
-	    eventHtml.push("            <div class='octoslack_label octoslack_action_label' onclick=\"$('#octoslack_event_" + internalName + "_message').trigger('click')\">Channel(s) override</div>");
+	    eventHtml.push("            <input type='text' size='30' id='octoslack_event_" + internalName + "_ChannelOverride' "
+                + (useDataBind ? "data-bind='value: settings.plugins.Octoslack.supported_events." + internalName + ".ChannelOverride'" : "")
+                + (customChannelOverride.trim().length > 0 ? "value='" + this.escapeHtml(customChannelOverride.trim()) + "'" : "")
+                + ">");
+	    eventHtml.push("            <div class='octoslack_label octoslack_action_label'>Channel(s) override</div>");
 	    eventHtml.push("        </div>");
 
             //CaptureSnapshot
 	    eventHtml.push("        <div class='octoprint_config_row'>");
-	    eventHtml.push("            <input type='checkbox' class='octoslack_valign' id='octoslack_event_" + internalName + "_snapshot' data-bind='checked: settings.plugins.Octoslack.supported_events." + internalName + ".CaptureSnapshot'>");
+	    eventHtml.push("            <input type='checkbox' class='octoslack_valign' id='octoslack_event_" + internalName + "_snapshot' "
+                + (useDataBind ? "data-bind='checked: settings.plugins.Octoslack.supported_events." + internalName + ".CaptureSnapshot'" : "")
+                + (customCaptureSnapshot ? " checked " : " ")
+                + ">");
 	    eventHtml.push("            <div class='octoslack_label octoslack_action_label' onclick=\"$('#octoslack_event_" + internalName + "_snapshot').trigger('click')\">Include snapshot</div>");
 	    eventHtml.push("        </div>");
 
             //Message
 	    eventHtml.push("        <div class='octoprint_config_row'>");
-	    eventHtml.push("            <textarea class='octoslack_width_auto' rows='2' cols='60' id='octoslack_event_" + internalName + "_message' data-bind='value: settings.plugins.Octoslack.supported_events." + internalName + ".Message'></textarea>");
-	    eventHtml.push("            <div class='octoslack_label octoslack_action_label' onclick=\"$('#octoslack_event_" + internalName + "_message').trigger('click')\">Message</div>");
+	    eventHtml.push("            <textarea class='octoslack_width_auto' rows='2' cols='60' id='octoslack_event_" + internalName + "_message' "
+                + (useDataBind ? "data-bind='value: settings.plugins.Octoslack.supported_events." + internalName + ".Message'" : "")
+                + ">"
+                + (customMessage.trim().length > 0 ? this.escapeHtml(customMessage.trim()) : "")
+                + "</textarea>");
+	    eventHtml.push("            <div class='octoslack_label octoslack_action_label'>Message</div>");
 	    eventHtml.push("        </div>");
 
 
             //Fallback
 	    eventHtml.push("        <div class='octoprint_config_row'>");
-	    eventHtml.push("            <textarea class='octoslack_width_auto' rows='2' cols='60' id='octoslack_event_" + internalName + "_fallback' data-bind='textInput: settings.plugins.Octoslack.supported_events." + internalName + ".Fallback'></textarea>");
-	    eventHtml.push("            <div class='octoslack_label octoslack_action_label' onclick=\"$('#octoslack_event_" + internalName + "_fallback').trigger('click')\">Fallback</div>");
+	    eventHtml.push("            <textarea class='octoslack_width_auto' rows='2' cols='60' id='octoslack_event_" + internalName + "_fallback' " 
+                + (useDataBind ? "data-bind='textInput: settings.plugins.Octoslack.supported_events." + internalName + ".Fallback'" : "")
+                + ">"
+                + (customFallback.trim().length > 0 ? this.escapeHtml(customFallback.trim()) : "")
+                + "</textarea>");
+	    eventHtml.push("            <div class='octoslack_label octoslack_action_label'>Fallback</div>");
+	    eventHtml.push("        </div>");
+
+            if(action_text != null && action_handler != null)
+                eventHtml.push("        <div class='octoslack_align_right' style='width: 100%;'><button onclick='" + action_handler + "'>" + this.escapeHtml(action_text) + "</button></div>");
 	    eventHtml.push("        </div>");
 	}
 
-	var combined_str = eventHtml.join("\n");
-
-        var events_container = $("#octoslack_events_container");
-        events_container.attr("class", "octoslack_visible");
-        events_container.html(combined_str);
+        return eventHtml.join("\n");
     },
 
     buildSnapshotURLsTable : function() {
@@ -380,11 +489,11 @@ var Octoslack = {
         var urlsTable = "<table id='snapshot_urls_table'>";
         for (var i = 0; i < snapshot_urls.length; i++) {
 	    var decoded = decodeURIComponent(snapshot_urls[i]);
-            var urlRow = this.createURLRowHTML(decoded, "Remove", "Octoslack.removeURLRow(event, this); return false");
+            var urlRow = this.createURLRowHTML(decoded, "Remove", "Octoslack.removeURLRow(event, this); return false;");
             urlsTable += urlRow;
         }
 
-        var addRow = this.createURLRowHTML(null, "Add", "Octoslack.addBlankURLRow(event, this); return false");
+        var addRow = this.createURLRowHTML(null, "Add URL", "Octoslack.addBlankURLRow(event, this); return false;");
         urlsTable += addRow;
 
         urlsTable += "</table>";
@@ -395,13 +504,14 @@ var Octoslack = {
     },
 
     addBlankURLRow : function(e, cell_elem) {
-        var rowElem = cell_elem.parentNode;
+        var buttonElem = cell_elem.parentNode;
+        var rowElem = buttonElem.parentNode;
         var tableElem = rowElem.parentNode;
 
         var newRow = document.createElement('tr');
         tableElem.insertBefore(newRow, rowElem);
 
-        newRow.outerHTML = this.createURLRowHTML("", "Remove", "Octoslack.removeURLRow(event, this); return false");
+        newRow.outerHTML = this.createURLRowHTML("", "Remove", "Octoslack.removeURLRow(event, this); return false;");
     },
 
     createURLRowHTML : function(url, action_text, action_handler) {
@@ -414,14 +524,15 @@ var Octoslack = {
         else
             tableRow += "<input type='text' class='octoslack_width_auto' size='60' oninput='Octoslack.storeSnapshotURLs();' onchange='Octoslack.storeSnapshotURLs();' value='" + this.escapeHtml(url) + "'>";
         tableRow += "</td>";
-        tableRow += "<td class='octoslack_action_label' style='width: 100px;' onclick='" + action_handler + "'><button>" + this.escapeHtml(action_text) + "</button></td>";
+        tableRow += "<td style='width: 100px;'><button onclick='" + action_handler + "'>" + this.escapeHtml(action_text) + "</button></td>";
         tableRow += "</tr>";
 
         return tableRow;
     },
 
     removeURLRow : function(e, cell_elem) {
-        var rowElem = cell_elem.parentNode;
+        var buttonElem = cell_elem.parentNode;
+        var rowElem = buttonElem.parentNode;
         rowElem.parentNode.removeChild(rowElem);
 
         this.storeSnapshotURLs();
@@ -455,5 +566,97 @@ var Octoslack = {
 
 	urls_hidden.val(combined_str);
         urls_hidden.trigger('change');
+    },
+
+    buildGcodeEventsTable : function() {
+	var hidden_value = $("#octoslack_gcode_events_hidden").val();
+	var gcode_events = hidden_value == undefined || hidden_value.trim().length == 0 ? [] : eval(hidden_value);
+
+	var eventsHtml = this.buildOctoPrintEventConfigRow('GCODE', gcode_events, "Remove", "Octoslack.removeGcodeEventRow(event, this); return false;");
+        
+        var gcode_events_container = $("#octoslack_gcode_events_container");
+        gcode_events_container.html(eventsHtml);
+    },
+
+    addGcodeEventRow : function(e) {
+        var gcode_events_container = $("#octoslack_gcode_events_container");
+
+	var empty_event = [
+		{ "InternalName" : String(Date.now()), 
+                  "Gcode" : "", 
+                  "Color" : "good", 
+                  "Enabled" : true, 
+                  "ChannelOverride" : "", 
+                  "CaptureSnapshot" : true, 
+                  "Message" : "", 
+                  "Fallback" : ""
+                },
+	];
+
+        var new_event_html = this.buildOctoPrintEventConfigRow('GCODE', empty_event, "Remove", "Octoslack.removeGcodeEventRow(event, this); return false");
+        gcode_events_container.append(new_event_html);
+    },
+
+    createGcodeEventRowHTML : function(url, action_text, action_handler) {
+        var tableRow = "<tr>";
+        tableRow += "<td>";
+
+        //TODO we're lazily updating the list on every change (quick and dirty solution)
+        if(url == null)
+            tableRow += "&nbsp;";
+        else
+            tableRow += "<input type='text' class='octoslack_width_auto' size='60' oninput='Octoslack.storeSnapshotURLs();' onchange='Octoslack.storeSnapshotURLs();' value='" + this.escapeHtml(url) + "'>";
+        tableRow += "</td>";
+        tableRow += "<td style='width: 100px;'><button onclick='" + action_handler + "'>" + this.escapeHtml(action_text) + "</button></td>";
+        tableRow += "</tr>";
+
+        return tableRow;
+    },
+
+    removeGcodeEventRow : function(e, cell_elem) {
+        var buttonElem = cell_elem.parentNode;
+        var rowElem = buttonElem.parentNode;
+        rowElem.parentNode.removeChild(rowElem);
+    },
+
+    storeGcodeEvents : function() {
+
+        var gcode_events = [];
+
+        var gcode_events_container = $("#octoslack_gcode_events_container");
+
+        gcode_events_container.children().each(function() {
+            var id = this.getAttribute('id')
+            if(!id.startsWith("GCODE_"))
+                return;
+
+            var internalName = this.getAttribute('internalname');
+            if(internalName == undefined)
+                return;
+
+            var enabled = $("#octoslack_event_" + internalName + "_enabled").is(':checked');
+            var gcode = $("#octoslack_event_" + internalName + "_gcode").val();
+            var color = $("#octoslack_event_" + internalName + "_color").val();
+            var channeloverride = $("#octoslack_event_" + internalName + "_ChannelOverride").val();
+            var snapshot = $("#octoslack_event_" + internalName + "_snapshot").is(':checked');
+            var message = $("#octoslack_event_" + internalName + "_message").val();
+            var fallback = $("#octoslack_event_" + internalName + "_fallback").val();
+
+            gcode_events.push({ "InternalName" : internalName, 
+                                  "Gcode" : gcode, 
+                                  "Color" : color, 
+                                  "Enabled" : enabled, 
+                                  "ChannelOverride" : channeloverride, 
+                                  "CaptureSnapshot" : snapshot, 
+                                  "Message" : message, 
+                                  "Fallback" : fallback
+                                });
+        });
+
+        var combined_str = JSON.stringify(gcode_events);
+
+	var hidden_value = $("#octoslack_gcode_events_hidden");
+        hidden_value.val(combined_str);
+        hidden_value.trigger('change');
     },
 }

@@ -28,7 +28,9 @@ import time
 import threading
 import requests
 import math
+import re
 import subprocess
+import copy
 
 
 class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
@@ -283,6 +285,20 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 					"IntervalPct" : 25,
 					"IntervalTime" : 0,
                         	},
+				##Not a real event but we'll leverage the same config structure
+                    		"GcodeEvent" : {
+                        		"Enabled" : False, ##Overwritten by each event
+                        		"ChannelOverride" : "", ##Overwritten by each event
+                        		"Message" : "", ##Overwritten by each event
+                        		"Fallback" : "", ##Overwritten by each event
+                        		"Color" : "good", ##Hardcoded to 'good' for now
+                        		"CaptureSnapshot" : False, ##Overwritten by each event
+					"ReportPrinterState" : True,
+					"ReportJobState" : True,
+					"ReportJobOrigEstimate" : False,
+					"ReportJobProgress" : True,
+					"ReportMovieStatus" : False,
+                        	},
                     		"PrintPaused" : {
                         		"Enabled" : True,
                         		"ChannelOverride" : "",
@@ -348,7 +364,8 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 					"ReportJobProgress" : False,
 					"ReportMovieStatus" : True,
                         	}
-                    	}
+                    	},
+			"gcode_events" : "",
 		}
 
 	def get_settings_restricted_paths(self):
@@ -376,12 +393,13 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 	def on_settings_save(self, data):
         	octoprint.plugin.SettingsPlugin.on_settings_save(self, data)
 		self.update_progress_timer()
+		self.update_gcode_listeners()
 
 
 	##~ TemplatePlugin mixin
 
-	def get_template_vars(self):
-		return dict()
+	##def get_template_vars(self):
+	##	return dict()
 
 	def get_template_configs(self):
 		return [
@@ -428,6 +446,8 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 		self.start_rtm_client()
         	self._logger.debug("Started Slack RTM client")
 
+		self.update_gcode_listeners()
+
 
 	##~~ ShutdownPlugin mixin
 
@@ -446,7 +466,7 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 			progress_interval = int(self._settings.get(['supported_events'], merged=True).get('Progress').get('IntervalPct'))
 
 			if (progress % progress_interval == 0 and progress != 0) or progress == 100:
-				self.handle_event("Progress", None, {"progress":progress}, False)
+				self.handle_event("Progress", None, {"progress":progress}, False, None)
 		except Exception as e:
 			self._logger.exception("Error processing progress event, Error: " + str(e.message))
 		
@@ -455,7 +475,7 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 
 	def progress_timer_tick(self):
 		self._logger.debug("Progress timer tick")
- 		self.handle_event("Progress", None, {}, False)
+ 		self.handle_event("Progress", None, {}, False, None)
 
 	print_cancel_time = None
 	progress_timer = None
@@ -496,9 +516,9 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 		
 
 	def on_event(self, event, payload):
-		self.handle_event(event, None, payload, False)
+		self.handle_event(event, None, payload, False, None)
 
-	def handle_event(self, event, channel_override, payload, override_event_enabled_check):
+	def handle_event(self, event, channel_override, payload, override_event_enabled_check, event_settings_overrides):
 		try:
 			if event == "PrintCancelled":
 				self.stop_progress_timer()
@@ -518,7 +538,6 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 				self.stop_progress_timer()
 				self.print_cancel_time = None
 					
-
 			supported_events = self._settings.get(['supported_events'], merged=True)
 			if supported_events == None or not event in supported_events:
 				return
@@ -527,6 +546,10 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 
 			if event_settings == None:
 				return
+
+			if not event_settings_overrides == None:
+				for key in event_settings_overrides:
+					event_settings[key] = event_settings_overrides[key]
 
 			event_enabled = override_event_enabled_check or event_settings['Enabled']
 			if not event_enabled or event_enabled == False:
@@ -591,6 +614,7 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 			"{elapsed_time}" : "N/A",
 			"{remaining_time}" : "N/A",
 			"{error}" : "N/A",
+			"{cmd" : "N/A",
 		}
 
 		printer_data = self._printer.get_current_data()
@@ -726,6 +750,9 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 		if reportFinalPrintTime:
 			text_arr.append(self.bold_text() + "Final print time" + self.bold_text() + " " + final_time)
 
+		if event == "GcodeEvent" and 'cmd' in event_payload:
+			replacement_params['{cmd}'] = event_payload["cmd"]
+
 		if reportMovieStatus:
 			movie_name = None
 			print_filename = None
@@ -842,8 +869,8 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 									self._logger.error("RPM message processing error: " + str(e.message))
 						time.sleep(1)
 					except WebSocketConnectionClosedException as ce:
-						self._logger.error("RPM API read error (WebSocketConnectionClosedException): " + str(e.message))
-						time.sleep(1 * 1000)
+						self._logger.error("RPM API read error (WebSocketConnectionClosedException): " + str(ce.message))
+						time.sleep(5 * 1000)
 
 						##Reinitialize the connection
 						sc = SlackClient(slackAPIToken)
@@ -909,7 +936,7 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 
 		if command == "help":
 			self._logger.debug("Slack RTM - help command")
- 			self.handle_event("Help", channel, {}, True)
+ 			self.handle_event("Help", channel, {}, True, None)
 			reaction = positive_reaction
 			
 		elif command == "stop":
@@ -951,7 +978,7 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 			sent_processing_reaction = True
 
 			self.add_message_reaction(slackAPIToken, channel, timestamp, processing_reaction, False)
- 			self.handle_event("Progress", channel, {}, True)
+ 			self.handle_event("Progress", channel, {}, True, None)
 			reaction = positive_reaction
 
 		else:
@@ -1225,6 +1252,8 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 				except Exception as e:
 					self._logger.exception("Slack WebHook message send error: " + str(e))
 
+	tmp_imgur_client = None
+
 	def upload_snapshot(self):
 		snapshot_upload_method = self._settings.get(['snapshot_upload_method'], merged=True)
 		if snapshot_upload_method == None or snapshot_upload_method == "NONE":
@@ -1350,7 +1379,8 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 						return imgurUrl, snapshot_errors
 					except ImgurClientError as ie:
 						self._logger.exception("Failed to upload snapshot to Imgur (ImgurClientError): " + str(ie.error_message) + ", StatusCode: " + str(ie.status_code))
-						self._logger.exception("ImgurError: " + str(self.tmp_imgur_client.credits))
+						if not self.tmp_imgur_client == None:
+							self._logger.exception("ImgurError: " + str(self.tmp_imgur_client.credits))
 						snapshot_errors.append("Imgur error: " + str(ie.error_message))
 					except ImgurClientRateLimitError as rle:
 						self._logger.exception("Failed to upload snapshot to Imgur (ImgurClientRateLimitError): " + str(e))
@@ -1364,6 +1394,7 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 			finally:
 				if not local_file_path == None:
 					os.remove(local_file_path)
+				self.tmp_imgur_client = None
 		return None, snapshot_errors
 
 	def retrieve_snapshot_images(self):
@@ -1373,6 +1404,8 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 		localCameraFlipH = self._settings.globalGet(["webcam", "flipH"])
 		localCameraFlipV = self._settings.globalGet(["webcam", "flipV"])
 		localCameraRotate90 = self._settings.globalGet(["webcam", "rotate90"])
+
+		self._logger.debug("Local camera settings - Snapshot URL:" + str(localCamera) + ", FlipH: " + str(localCameraFlipH) + ", FlipV: " + str(localCameraFlipV) + ", Rotate90: " + str(localCameraRotate90))
 
 		if not localCamera == None:
 			urls.append((localCamera, localCameraFlipH, localCameraFlipV, localCameraRotate90))
@@ -1440,6 +1473,8 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 		temp_filename = None
 
 		try:
+			download_start = time.time()
+			
 			basic_auth_user = None
 			basic_auth_pwd = None
 
@@ -1480,18 +1515,28 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 
 			temp_file.close()
 
+			download_elapsed = time.time() - download_start
+			self._logger.debug("Downloaded snapshot from URL: " + url + " (" + octoprint.util.get_formatted_size(imgByteCount) + ") in " + str(round(download_elapsed, 2)) + " seconds to " + temp_filename)
+			self._logger.debug("Transpose operations for URL: " + url + " - FlipH: " + str(flip_h) + ", FlipV: " + str(flip_v) + ", Rotate90: " + str(rotate_90))
+
 			if flip_h or flip_v or rotate_90:
+				self._logger.debug("Opening file to transpose image for URL: " + url)
 				tmp_img = Image.open(temp_filename)
 				if flip_h:
+					self._logger.debug("Flipping image horizontally for URL: " + url)
 					tmp_img = tmp_img.transpose(Image.FLIP_LEFT_RIGHT)
+					self._logger.debug("Horizontally flip complete for URL: " + url)
 				if flip_v:
+					self._logger.debug("Flipping image vertically for URL: " + url)
 					tmp_img = tmp_img.transpose(Image.FLIP_TOP_BOTTOM)
+					self._logger.debug("Vertical flip complete for URL: " + url)
 				if rotate_90:
+					self._logger.debug("Rotating image 90 degrees for URL: " + url)
 					tmp_img = tmp_img.transpose(Image.ROTATE_90)
+					self._logger.debug("90 degree rotate complete for URL: " + url)
 
+				self._logger.debug("Saving transposed image for URL: " + url + " to " + temp_filename)
 				tmp_img.save(temp_filename, "JPEG")
-
-			self._logger.debug("Downloaded snapshot from URL: " + url + " (" + octoprint.util.get_formatted_size(imgByteCount) + ") to " + temp_filename)
 
 			responses[rsp_idx] = (temp_filename, None)
 		except Exception as e:
@@ -1701,6 +1746,91 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 			if not temp_fd == None:
 				os.close(temp_fd)
 
+	##~~ GCode processing
+
+##[
+##  {
+##    "InternalName": "123",
+##    "Gcode": "M500",
+##    "Enabled": true,
+##    "ChannelOverride": "",
+##    "CaptureSnapshot": true,
+##    "Message": "",
+##    "Fallback": ""
+##  },
+##  {
+##    "InternalName": "456",
+##    "Gcode": "M600  TEST",
+##    "Enabled": false,
+##    "ChannelOverride": "testchannel",
+##    "CaptureSnapshot": false,
+##    "Message": "testmessage",
+##    "Fallback": "testfallback"
+##  },
+##  {
+##    "InternalName": "789",
+##    "Gcode": "M201 TEST;",
+##    "Enabled": true,
+##    "ChannelOverride": "",
+##    "CaptureSnapshot": true,
+##    "Message": "",
+##    "Fallback": ""
+##  }
+##]
+
+	active_gcode_events = []
+	def update_gcode_listeners(self):
+		try:
+			self._logger.info("Updating G-code listeners")
+
+
+			events_str = connection_method = self._settings.get(['gcode_events'], merged=True)
+
+			if events_str == None or len(events_str.strip()) == 0:
+				tmp_gcode_events = []
+			else:
+				tmp_gcode_events = json.loads(events_str)
+
+			new_gcode_events = []
+
+			for gcode_event in tmp_gcode_events:
+				if not gcode_event["Enabled"] == True:
+					continue;
+
+				new_gcode_events.append(gcode_event)
+				
+			self.active_gcode_events = new_gcode_events
+
+			self._logger.debug("Active G-code events: " + json.dumps(self.active_gcode_events))
+
+		except Exception as e:
+			self._logger.exception("Error loading gcode listener events: %s" % (str(e)))
+
+	def sending_gcode(self, comm_instance, phase, cmd, cmd_type, gcode, *args, **kwargs):
+		if not gcode or self.active_gcode_events == None or len(self.active_gcode_events) == 0:
+			return cmd,
+
+		try:
+			for gcode_event in self.active_gcode_events:
+				trigger_gcode = gcode_event["Gcode"]
+
+				if trigger_gcode == None:
+					continue
+				
+				trigger_gcode = trigger_gcode.strip()
+
+				if cmd.startswith(trigger_gcode):
+					self._logger.info("Caught command: " + self.remove_non_ascii(cmd))
+					self.handle_event("GcodeEvent", None, {"cmd":cmd}, True, gcode_event)
+					
+		except Exception as e:
+			self._logger.exception("Error attempting to match G-code command to the configured events, G-code: " + gcode + ", Error: " + str(e.message))
+
+		return cmd,
+
+	non_ascii_regex = re.compile(r'[^\x00-\x7F]')
+	def remove_non_ascii(self, input):
+		return self.non_ascii_regex.sub(' ', input)
 
 def __plugin_load__():
 	global __plugin_implementation__
@@ -1708,5 +1838,6 @@ def __plugin_load__():
 
 	global __plugin_hooks__
 	__plugin_hooks__ = {
-		"octoprint.plugin.softwareupdate.check_config": __plugin_implementation__.get_update_information
+		"octoprint.plugin.softwareupdate.check_config": __plugin_implementation__.get_update_information,
+		"octoprint.comm.protocol.gcode.sending": __plugin_implementation__.sending_gcode
 	}

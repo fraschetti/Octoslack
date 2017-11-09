@@ -407,4 +407,34 @@
         <div id="octoslack_events_container" class="octoslack_hidden">
 	</div>
     </div>
+    <br/>
+    <h2>G-code Events</h2>
+    <div class="octoslack_config_group">
+        <div class="octoprint_config_row">
+	    <small class="muted">
+		The following variables are available for use in your custom messages
+		<br/>
+		<p class="octoslack_indented">
+			<br/>
+			<strong>{print_name}</strong> - The name of the current print
+			<br/>
+			<strong>{pct_complete}</strong> - Progress metric for the print
+			<br/>
+			<strong>{elapsed_time}</strong> - Time since start of print
+			<br/>
+			<strong>{remaining_time}</strong> - Estimated remaining print time
+			<br/>
+			<strong>{error}</strong> - For error/failed events, the error message (if available)
+			<br/>
+			<strong>{cmd}</strong> - The G-code to be executed (available for G-code detection events)
+		</p>
+		<br/>
+                When <strong>Channel(s) override</strong> is left blank, enabled events will sent to the default Channel(s) configured above
+	    </small>
+        </div>
+	<input type="hidden" id="octoslack_gcode_events_hidden" data-bind="value: settings.plugins.Octoslack.gcode_events">
+        <div id="octoslack_gcode_events_container"></div>
+        <br/>
+        <div class="octoslack_align_right" style="width: 100%;"><button onclick="Octoslack.addGcodeEventRow(); return false;">Add G-code event</button></div>
+    </div>
 </form>

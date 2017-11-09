@@ -25,6 +25,9 @@
 .octoslack_valign {
     vertical-align: middle;
 }
+.octoslack_align_right {
+    text-align: right;
+}
 .octoslack_width_auto {
     width: auto;
 }
