@@ -46,7 +46,6 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 	##TODO FEATURE - Add support for Imgur image title + description
 	##TODO FEATURE - Optionally upload timelapse video to youtube & send a Slack message when the upload is complete
 	##TODO ENHANCEMENT - Check every N minutes if Slack RTM client has received any data. Reconnect if it hasn't
-	##TODO FEATURE - Add alerts based on GCode sent from OctoPrint (e.g. M600 color change for the Marlin firmware)
 	##TODO ENHANCEMENT - Remove the need to restart OctoPrint when switching between the Slack API and WebHook
 	##TODO FEATURE - Define a third set of messages for each event to allow sending M117 commands to the printer
 
@@ -283,6 +282,7 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 					"ReportJobProgress" : True,
 					"ReportMovieStatus" : False,
 					"IntervalPct" : 25,
+					"IntervalHeight" : 0,
 					"IntervalTime" : 0,
                         	},
 				##Not a real event but we'll leverage the same config structure
@@ -461,11 +461,11 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 
 	def on_print_progress(self, location, path, progress):
 		try:
-			self._logger.debug("Progress: " + str(progress))
-
 			progress_interval = int(self._settings.get(['supported_events'], merged=True).get('Progress').get('IntervalPct'))
 
-			if (progress % progress_interval == 0 and progress != 0) or progress == 100:
+			self._logger.debug("Progress: " + str(progress) + " - IntervalPct: " + str(progress_interval))
+
+			if (progress > 0 and progress_interval > 0 and progress % progress_interval == 0) or progress == 100:
 				self.handle_event("Progress", None, {"progress":progress}, False, None)
 		except Exception as e:
 			self._logger.exception("Error processing progress event, Error: " + str(e.message))
@@ -513,7 +513,28 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 			self._logger.debug("Stopping progress timer")
 			self.progress_timer.cancel()
 			self.progress_timer = None
-		
+
+	last_trigger_height = 0.0
+	def process_zheight_change(self, payload):
+		if not self._printer.is_printing():
+			return False
+		if not "new" in payload:
+			return False
+
+		height_interval = float(self._settings.get(['supported_events'], merged=True).get('Progress').get('IntervalHeight'))
+		if height_interval <= 0:
+			return False
+
+		new = payload["new"]
+		if new <= self.last_trigger_height:
+			return False
+
+		if new >= (self.last_trigger_height + height_interval):
+			self._logger.debug("ZChange interval: " + str(height_interval) + ", Last trigger height: " + str(self.last_trigger_height) + ", Payload: " + json.dumps(payload))
+			self.last_trigger_height = new
+			return True
+
+		return False
 
 	def on_event(self, event, payload):
 		self.handle_event(event, None, payload, False, None)
@@ -534,9 +555,15 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 			elif event == "PrintStarted":
 				self.start_progress_timer()
 				self.print_cancel_time = None
+				self.last_trigger_height = 0.0
 			elif event == "PrintDone":
 				self.stop_progress_timer()
 				self.print_cancel_time = None
+			elif event == "ZChange":
+				if self.process_zheight_change(payload):
+ 					self.handle_event("Progress", None, payload, False, None)
+				return
+				
 					
 			supported_events = self._settings.get(['supported_events'], merged=True)
 			if supported_events == None or not event in supported_events:
@@ -630,7 +657,7 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 
 		z_height_str = ""
 		if not z_height == None and not z_height == 'None':
-			z_height_str = ", Nozzle Height: " + str(z_height) + "mm"
+			z_height_str = ", Nozzle Height: " + "{0:.2f}".format(z_height) + "mm"
 			
 		replacement_params['{current_z}'] = z_height_str
 
@@ -1098,6 +1125,7 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 		slackWebHookUrl = None
 
 		connection_method = self._settings.get(['connection_method'], merged=True)
+		self._logger.debug("Slack connection method: " + connection_method)
 
 		if connection_method == "APITOKEN":
 			slackAPIToken = self._settings.get(['slack_apitoken_config'], merged=True).get('api_token')
@@ -1191,7 +1219,7 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 		if not channels:
 			channels = ''
 
-		self._logger.debug("Slack API postMessage - Channels: " + channels + ", JSON: " + attachments_json)
+		self._logger.debug("Slack postMessage - Channels: " + channels + ", JSON: " + attachments_json)
 
 		slack_identity_config = self._settings.get(['slack_identity'], merged=True)
 		slack_as_user = slack_identity_config['existing_user']
@@ -1206,11 +1234,16 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 				slack_icon_emoji = slack_identity_config['icon_emoji']
 			if 'username' in slack_identity_config:
 				slack_username = slack_identity_config['username']
-	
+
+		allow_empty_channel = connection_method == "WEBHOOK"
+
 		for channel in channels.split(","):
 			channel = channel.strip()
-			if len(channel) == 0:
+
+			if len(channel) == 0 and not allow_empty_channel:
 				continue
+
+			allow_empty_channel = False
 
 			if not slackAPIToken == None and len(slackAPIToken) > 0:
 				try:
@@ -1246,6 +1279,7 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 				try:
 					webHook = IncomingWebhook(slackWebHookUrl)
 					webHookRsp = webHook.post(slack_msg)
+					self._logger.debug("Slack WebHook postMessage response: " + webHookRsp.text)
 
 					if not webHookRsp.ok:
 						self._logger.error("Slack WebHook message send failed: " + webHookRsp.text)
@@ -1383,8 +1417,8 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 							self._logger.exception("ImgurError: " + str(self.tmp_imgur_client.credits))
 						snapshot_errors.append("Imgur error: " + str(ie.error_message))
 					except ImgurClientRateLimitError as rle:
-						self._logger.exception("Failed to upload snapshot to Imgur (ImgurClientRateLimitError): " + str(e))
-						snapshot_errors.append("Imgur error: " + str(e))
+						self._logger.exception("Failed to upload snapshot to Imgur (ImgurClientRateLimitError): " + str(rle))
+						snapshot_errors.append("Imgur error: " + str(rle))
 					except Exception as e:
 						self._logger.exception("Failed to upload snapshot to Imgur (Exception): " + str(e))
 						snapshot_errors.append("Imgur error: " + str(e))
@@ -1747,36 +1781,6 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 				os.close(temp_fd)
 
 	##~~ GCode processing
-
-##[
-##  {
-##    "InternalName": "123",
-##    "Gcode": "M500",
-##    "Enabled": true,
-##    "ChannelOverride": "",
-##    "CaptureSnapshot": true,
-##    "Message": "",
-##    "Fallback": ""
-##  },
-##  {
-##    "InternalName": "456",
-##    "Gcode": "M600  TEST",
-##    "Enabled": false,
-##    "ChannelOverride": "testchannel",
-##    "CaptureSnapshot": false,
-##    "Message": "testmessage",
-##    "Fallback": "testfallback"
-##  },
-##  {
-##    "InternalName": "789",
-##    "Gcode": "M201 TEST;",
-##    "Enabled": true,
-##    "ChannelOverride": "",
-##    "CaptureSnapshot": true,
-##    "Message": "",
-##    "Fallback": ""
-##  }
-##]
 
 	active_gcode_events = []
 	def update_gcode_listeners(self):

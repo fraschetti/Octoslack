@@ -418,13 +418,28 @@ var Octoslack = {
 	        eventHtml.push("        </div>");
 	        eventHtml.push("        <br/>");
 
+                //IntervalHeight
+	        eventHtml.push("        <div class='octoprint_config_row'>");
+	        eventHtml.push("            <input type='number' step='0.1' min='0' max='10000' class='input-mini text-right' id='octoslack_event_" + internalName + "_InvervalHeight' "
+                    + (useDataBind ? "data-bind='value: settings.plugins.Octoslack.supported_events." + internalName + ".IntervalHeight'" : "")
+                    + ">");
+	        eventHtml.push("            <div class='octoslack_label octoslack_action_label'>Interval - Height (mm)</div>");
+	        eventHtml.push("            <br/>");
+	        eventHtml.push("            <small class='muted'>");
+	        eventHtml.push("                0 = disabled");
+	        eventHtml.push("                <br/>");
+	        eventHtml.push("                A value of 50 would indicate report progress should be logged each time the nozzle height has raised an additional 50mm");
+	        eventHtml.push("            </small>");
+	        eventHtml.push("        </div>");
+	        eventHtml.push("        <br/>");
+
 
                 //IntervalTime
 	        eventHtml.push("        <div class='octoprint_config_row'>");
 	        eventHtml.push("            <input type='number' step='any' min='0' class='input-mini text-right' id='octoslack_event_" + internalName + "_IntervalTime' "
                     + (useDataBind ? "data-bind='value: settings.plugins.Octoslack.supported_events." + internalName + ".IntervalTime'" : "")
                     + ">");
-	        eventHtml.push("            <div class='octoslack_label octoslack_action_label'>Interval - Time (Minutes)</div>");
+	        eventHtml.push("            <div class='octoslack_label octoslack_action_label'>Interval - Time (minutes)</div>");
 	        eventHtml.push("            <br/>")
 	        eventHtml.push("            <small class='muted'>");
 	        eventHtml.push("                0 = disabled");
