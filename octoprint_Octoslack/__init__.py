@@ -1785,8 +1785,7 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 	active_gcode_events = []
 	def update_gcode_listeners(self):
 		try:
-			self._logger.info("Updating G-code listeners")
-
+			self._logger.debug("Updating G-code listeners")
 
 			events_str = connection_method = self._settings.get(['gcode_events'], merged=True)
 
@@ -1824,7 +1823,7 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 				trigger_gcode = trigger_gcode.strip()
 
 				if cmd.startswith(trigger_gcode):
-					self._logger.info("Caught command: " + self.remove_non_ascii(cmd))
+					self._logger.debug("Caught command: " + self.remove_non_ascii(cmd))
 					self.handle_event("GcodeEvent", None, {"cmd":cmd}, True, gcode_event)
 					
 		except Exception as e:
