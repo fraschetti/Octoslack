@@ -48,6 +48,7 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 	##TODO ENHANCEMENT - Check every N minutes if Slack RTM client has received any data. Reconnect if it hasn't
 	##TODO ENHANCEMENT - Remove the need to restart OctoPrint when switching between the Slack API and WebHook
 	##TODO FEATURE - Define a third set of messages for each event to allow sending M117 commands to the printer
+	##TODO ENHANCEMENT - The progress event fires on gcode uploads and triggers Octoslack events. That needs to be fixed.
 
 	##~~ SettingsPlugin mixin
 
