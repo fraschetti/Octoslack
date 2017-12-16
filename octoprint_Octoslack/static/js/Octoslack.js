@@ -675,3 +675,5 @@ var Octoslack = {
         hidden_value.trigger('change');
     },
 }
+
+window.Octoslack = Octoslack;
