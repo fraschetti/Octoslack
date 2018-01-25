@@ -1798,7 +1798,7 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 			new_gcode_events = []
 
 			for gcode_event in tmp_gcode_events:
-				if not gcode_event["Enabled"] == True:
+				if not gcode_event["Enabled"] == True or len(gcode_event["Gcode"].strip()) == 0:
 					continue;
 
 				new_gcode_events.append(gcode_event)
@@ -1818,7 +1818,7 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 			for gcode_event in self.active_gcode_events:
 				trigger_gcode = gcode_event["Gcode"]
 
-				if trigger_gcode == None:
+				if trigger_gcode == None or len(trigger_gcode.strip()) == 0:
 					continue
 				
 				trigger_gcode = trigger_gcode.strip()
