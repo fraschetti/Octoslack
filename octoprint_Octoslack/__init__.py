@@ -831,10 +831,10 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 					field['title'] = field['title'].replace(param, replacement_params[param])
 				if 'value' in field:
 					field['value'] = field['value'].replace(param, replacement_params[param])
+
+		t = threading.Thread(target=self.send_slack_message, args=(event, channel_override, fallback, pretext, title, text, color, fields, footer, includeSnapshot))
+		t.start()
 				
-		self.send_slack_message(event, channel_override, fallback, pretext, title, text, color, fields, footer, includeSnapshot)
-
-
 	def start_rtm_client(self):
 		self.stop_rtm_client()
 
@@ -1826,7 +1826,6 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 				if cmd.startswith(trigger_gcode):
 					self._logger.debug("Caught command: " + self.remove_non_ascii(cmd))
 					self.handle_event("GcodeEvent", None, {"cmd":cmd}, True, gcode_event)
-					
 		except Exception as e:
 			self._logger.exception("Error attempting to match G-code command to the configured events, G-code: " + gcode + ", Error: " + str(e.message))
 
