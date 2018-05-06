@@ -32,6 +32,7 @@ import re
 import subprocess
 import copy
 
+HTTPS_SLACK_API = "https://slack.com/api/"
 
 class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
                       octoprint.plugin.AssetPlugin,
@@ -64,6 +65,9 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 			},
 			"slack_webhook_config" : {
 				"webhook_url" : "",
+			},
+			"slack_bot_config" : {
+				"token" : "",
 			},
 			"slack_identity" : {
 				"existing_user" : True,
@@ -282,6 +286,7 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 					"ReportJobOrigEstimate" : False,
 					"ReportJobProgress" : True,
 					"ReportMovieStatus" : False,
+					"UpdateMethod" : "INPLACE",
 					"IntervalPct" : 25,
 					"IntervalHeight" : 0,
 					"IntervalTime" : 0,
@@ -448,6 +453,8 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
         	self._logger.debug("Started Slack RTM client")
 
 		self.update_gcode_listeners()
+
+		self._bot_progress_req = None
 
 
 	##~~ ShutdownPlugin mixin
@@ -717,15 +724,21 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 
 		elapsed_str = self.format_duration(elapsed)
 		time_left_str = self.format_duration(time_left)
+		if time_left >= 0:
+			eta_str = time.strftime('%H:%M, %d %b', time.localtime(time.time() + time_left))
+		else:
+			eta_str = "N/A"
 		
 		if not elapsed == None:
 			replacement_params['{elapsed_time}'] = elapsed_str
 		if not time_left == None:
 			replacement_params['{remaining_time}'] = time_left_str
+			replacement_params['{eta}'] = eta_str
 
 		if reportJobProgress and not pct_complete == None:
 			text_arr.append(self.bold_text() + "Elapsed" + self.bold_text() + " " + elapsed_str)
 			text_arr.append(self.bold_text() + "Remaining" + self.bold_text() + " " + time_left_str)
+			text_arr.append(self.bold_text() + "ETA" + self.bold_text() + " " + eta_str)
 
 		##Is rendered as a footer so it's safe to always include this
 		if reportPrinterState:
@@ -1126,6 +1139,7 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 		slackWebHookUrl = None
 
 		connection_method = self._settings.get(['connection_method'], merged=True)
+		progress_update_method = self._settings.get(['supported_events'], merged=True).get('Progress').get('UpdateMethod')
 		self._logger.debug("Slack connection method: " + connection_method)
 
 		if connection_method == "APITOKEN":
@@ -1136,8 +1150,12 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 			slackWebHookUrl = self._settings.get(['slack_webhook_config'], merged=True).get('webhook_url')
 			if not slackWebHookUrl == None:
 				slackWebHookUrl = slackWebHookUrl.strip()
+		elif connection_method == "BOT":
+			slackBotToken = self._settings.get(['slack_bot_config'], merged=True).get('token')
+			if not slackBotToken == None:
+				slackBotToken = slackBotToken.strip()
 
-		if (slackAPIToken == None or len(slackAPIToken) == 0) and (slackWebHookUrl == None or len(slackWebHookUrl) == 0):
+		if (slackAPIToken == None or len(slackAPIToken) == 0) and (slackWebHookUrl == None or len(slackWebHookUrl) == 0) and (slackBotToken == None or len(slackBotToken) == 0):
 			self._logger.error("Slack connection not available, skipping message send")
 			return
 
@@ -1261,31 +1279,69 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 					self._logger.debug("Slack API message send response: " + apiRsp.raw)
 				except Exception as e:
 					self._logger.exception("Slack API message send error: " + str(e))
-			elif not slackWebHookUrl == None and len(slackWebHookUrl) > 0:
+			elif slackWebHookUrl or slackBotToken:
 				slack_msg = {}
 				slack_msg['channel'] = channel
-	
-				if not slack_as_user == None:
-					slack_msg['as_user'] = slack_as_user
-				if not slack_icon_url == None and len(slack_icon_url) > 0:
-					slack_msg['icon_url'] = slack_icon_url
-				if not slack_icon_emoji == None and len(slack_icon_emoji) > 0:
-					slack_msg['icon_emoji'] = slack_icon_emoji
-				if not slack_username == None and len(slack_username) > 0:
-					slack_msg['username'] = slack_username
 
 				slack_msg['attachments'] = attachments
-				self._logger.debug("Slack WebHook postMessage json: " + json.dumps(slack_msg))
+				self._logger.debug("Slack WebHook/Bot postMessage json: " + json.dumps(slack_msg))
 	
-				try:
-					webHook = IncomingWebhook(slackWebHookUrl)
-					webHookRsp = webHook.post(slack_msg)
-					self._logger.debug("Slack WebHook postMessage response: " + webHookRsp.text)
+                if slackWebHookUrl:
+                    if not slack_as_user == None:
+                        slack_msg['as_user'] = slack_as_user
+                    if not slack_icon_url == None and len(slack_icon_url) > 0:
+                        slack_msg['icon_url'] = slack_icon_url
+                    if not slack_icon_emoji == None and len(slack_icon_emoji) > 0:
+                        slack_msg['icon_emoji'] = slack_icon_emoji
+                    if not slack_username == None and len(slack_username) > 0:
+                        slack_msg['username'] = slack_username
+                    try:
+                        webHook = IncomingWebhook(slackWebHookUrl)
+                        webHookRsp = webHook.post(slack_msg)
+                        self._logger.debug("Slack WebHook postMessage response: " + webHookRsp.text)
 
-					if not webHookRsp.ok:
-						self._logger.error("Slack WebHook message send failed: " + webHookRsp.text)
-				except Exception as e:
-					self._logger.exception("Slack WebHook message send error: " + str(e))
+                        if not webHookRsp.ok:
+                            self._logger.error("Slack WebHook message send failed: " + webHookRsp.text)
+                    except Exception as e:
+                        self._logger.exception("Slack WebHook message send error: " + str(e))
+                elif slackBotToken:
+                    try:
+                        slack_msg['token'] = slackBotToken
+                        #slack_msg['text'] = "testin"
+                        if not slack_msg['channel'].startswith('#'):
+                            slack_msg['channel'] = '#' + slack_msg['channel']
+                        if event == 'Progress':
+                            if self._bot_progress_req and progress_update_method == 'INPLACE':
+                                self.bot_update_message(self._bot_progress_req, slack_msg)
+                            else:
+                                self._bot_progress_req = self.bot_post_message(slack_msg)
+                        else:
+                            self._bot_progress_req = None
+                            self.bot_post_message(slack_msg)
+                    except Exception as e:
+                        self._logger.exception("Slack Botmessage send error: " + str(e))
+
+	def bot_post_message(self, msg, alert=False):
+        #if alert:
+        #    msg = '<!channel> ' + msg
+		return self.bot_slack_submit('chat.postMessage', msg)
+
+	def bot_update_message(self, origmsg, msg):
+		msg['ts'] = origmsg['ts']
+		msg['channel'] = origmsg['channel'] # This is the channel ID, not the name
+		return self.bot_slack_submit('chat.update', msg)
+
+	def bot_slack_submit(self, endpoint, msg):
+		if 'attachments' in msg:
+			msg['attachments'] = json.dumps(msg['attachments'])
+		response = requests.post(HTTPS_SLACK_API + endpoint, params=msg)
+		response.raise_for_status()
+		rsp = response.json()
+		self._logger.debug("Submit to %s msg: %r" % (endpoint, msg))
+		self._logger.debug("%s Response: %r" % (endpoint, rsp))
+		if rsp['ok'] != True:
+			raise ValueError("Response not OK: %s" % (rsp,))
+		return rsp
 
 	tmp_imgur_client = None
 
