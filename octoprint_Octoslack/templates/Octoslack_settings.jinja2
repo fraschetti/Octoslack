@@ -144,9 +144,16 @@
             <br/>
             <div class="octoprint_config_row">
                 <span class="octoslack_label">Bot User OAuth Access Token</span>
-                <input type="text" class="octoslack_width_auto" size="60" data-bind="value: settings.plugins.Octoslack.slack_bot_config.token">
+                <input type="text" class="octoslack_width_auto" size="60"
+                placeholder="xoxb-111111111111-aaaaaaaaaaaaaaaaaaaaaaaa" data-bind="value: settings.plugins.Octoslack.slack_bot_config.token">
 		        </br>
-		        <small class="muted">XXX ettings dialog. Apps &amp; integrations --&gt; Manage --&gt; Custom Integrations --&gt; Incoming WebHooks XXX</small>
+		        <small class="muted">Create a <a
+                       href="https://api.slack.com/slack-apps">Slack App</a>, and
+                     then add a Bot User (Bot Users --&gt; Add Bot User). Once
+                     created, OAuth &amp; Permissions --&gt; Install App to
+                     Workspace. Once installed, enter the "Bot User OAuth Access
+                     Token" above.
+                </small>
             </div>
         </div>
         <h3>Slack channel(s)</h3>
@@ -217,6 +224,12 @@
             <span class="octoslack_valign octoslack_action_label" onclick="$('#octoslackSnapshotUploadMethod_minio').trigger('click')">Minio S3</span>
 	    <br/>
 	    <small class="muted">Leverage Minio S3 compatible self hostable storage (see <a href="https://minio.io" target="_blank">Minio.io</a>)</small>
+        </div>
+        <div>
+            <input type="radio" name="octoslackSnapshotUploadMethod" id="octoslackSnapshotUploadMethod_bot" onclick="Octoslack.changeSnapshotUploadMethod(this);" class="octoslack_valign" value="BOT">
+            <span class="octoslack_valign octoslack_action_label" onclick="$('#octoslackSnapshotUploadMethod_bot').trigger('click')">Slack Bot</span>
+	    <br/>
+	    <small class="muted">Upload directly to Slack, only applicable for Slack Bot</small>
         </div>
         <div id="octoslack_imgur_group" class="octoslack_hidden">
             <br/>

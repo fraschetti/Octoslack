@@ -34,6 +34,10 @@ import copy
 
 HTTPS_SLACK_API = "https://slack.com/api/"
 
+# The minimum number of seconds between snapshot uploads for progress updates
+# This prevents Slack rate limiting our connection, and flooding the users upstream
+MIN_IMAGE_UPLOAD_DELAY = 60
+
 
 class OctoslackPlugin(
     octoprint.plugin.SettingsPlugin,
@@ -446,6 +450,8 @@ class OctoslackPlugin(
         self.update_gcode_listeners()
 
         self._bot_progress_req = None
+        self._bot_progress_image = None
+        self._bot_image_next_post_time = 0
 
     ##~~ ShutdownPlugin mixin
 
@@ -474,12 +480,10 @@ class OctoslackPlugin(
             )
 
             if (
-                (
-                    progress > 0
-                    and progress_interval > 0
-                    and progress % progress_interval == 0
-                )
-                or progress == 100
+                progress > 0
+                and progress < 100
+                and progress_interval > 0
+                and progress % progress_interval == 0
             ):
                 self.handle_event("Progress", None, {"progress": progress}, False, None)
         except Exception as e:
@@ -798,9 +802,8 @@ class OctoslackPlugin(
         elapsed_str = self.format_duration(elapsed)
         time_left_str = self.format_duration(time_left)
         if time_left >= 0:
-            eta_str = time.strftime(
-                "%H:%M, %d %b", time.localtime(time.time() + time_left)
-            )
+            eta = datetime.datetime.now() + datetime.timedelta(seconds=time_left)
+            eta_str = "%s %s" % (eta.strftime("%H:%M"), humanize.naturalday(eta))
         else:
             eta_str = "N/A"
 
@@ -1442,6 +1445,7 @@ class OctoslackPlugin(
         attachment["mrkdwn_in"] = ["text", "pretext"]
 
         snapshot_url_to_append = None
+        snapshot_msg = None
 
         if includeSnapshot:
             hosted_url, snapshot_errors = self.upload_snapshot()
@@ -1463,10 +1467,24 @@ class OctoslackPlugin(
                         text += snapshot_error
 
             if not hosted_url == None:
-                attachment["image_url"] = hosted_url
-
-                if self.mattermost_mode():
-                    snapshot_url_to_append = hosted_url
+                if self._settings.get(["snapshot_upload_method"], merged=True) == "BOT":
+                    if slackBotToken:
+                        if (
+                            event == "Progress"
+                            and time.time() < self._bot_image_next_post_time
+                        ):
+                            snapshot_msg = None
+                        else:
+                            self._bot_image_next_post_time = time.time() + MIN_IMAGE_UPLOAD_DELAY
+                            snapshot_msg = {
+                                "token": slackBotToken,
+                                "title": "%s snapshot at %s"
+                                % (event, time.strftime("%X")),
+                            }
+                else:
+                    attachment["image_url"] = hosted_url
+                    if self.mattermost_mode():
+                        snapshot_url_to_append = hosted_url
 
         if self.mattermost_mode() and not footer == None and len(footer) > 0:
             if text == None:
@@ -1613,7 +1631,23 @@ class OctoslackPlugin(
                                 )
                         else:
                             self._bot_progress_req = None
+                            self._bot_progress_image = None
                             self.bot_post_message(slack_msg)
+
+                        if snapshot_msg:
+                            snapshot_msg["channels"] = slack_msg["channel"]
+                            filedata = hosted_url
+                            open("/tmp/img.jpg", "wb").write(filedata)
+                            resp = self.bot_post_file(snapshot_msg, filedata)
+                            if event == "Progress":
+                                # bump out the delay again as an upload can take some time
+                                self._bot_image_next_post_time = time.time() + MIN_IMAGE_UPLOAD_DELAY
+                                if self._bot_progress_image:
+                                    self.bot_delete_file(
+                                        self._bot_progress_image, slackBotToken
+                                    )
+                                self._bot_progress_image = resp
+
                     except Exception as e:
                         self._logger.exception("Slack Botmessage send error: " + str(e))
 
@@ -1627,10 +1661,20 @@ class OctoslackPlugin(
         msg["channel"] = origmsg["channel"]  # This is the channel ID, not the name
         return self.bot_slack_submit("chat.update", msg)
 
-    def bot_slack_submit(self, endpoint, msg):
+    def bot_post_file(self, msg, filedata, filetype="jpg"):
+        msg["filetype"] = filetype
+        if "filename" not in msg:
+            msg["filename"] = "image.jpg"
+        return self.bot_slack_submit("files.upload", msg, files=(("file", filedata),))
+
+    def bot_delete_file(self, imgresp, token):
+        msg = {"token": token, "file": imgresp["file"]["id"]}
+        return self.bot_slack_submit("files.delete", msg)
+
+    def bot_slack_submit(self, endpoint, msg, **kwargs):
         if "attachments" in msg:
             msg["attachments"] = json.dumps(msg["attachments"])
-        response = requests.post(HTTPS_SLACK_API + endpoint, params=msg)
+        response = requests.post(HTTPS_SLACK_API + endpoint, params=msg, **kwargs)
         response.raise_for_status()
         rsp = response.json()
         self._logger.debug("Submit to %s msg: %r" % (endpoint, msg))
@@ -1840,6 +1884,9 @@ class OctoslackPlugin(
                             "Failed to upload snapshot to Imgur (Exception): " + str(e)
                         )
                         snapshot_errors.append("Imgur error: " + str(e))
+                elif snapshot_upload_method == "BOT":
+                    # Return the file data, the bot post will upload
+                    return open(local_file_path, "rb").read(), None
             except Exception as e:
                 self._logger.exception("Snapshot capture error: %s" % str(e))
                 snapshot_errors.append("Snapshot error: " + str(e.message))
