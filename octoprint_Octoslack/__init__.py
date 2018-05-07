@@ -1397,6 +1397,7 @@ class OctoslackPlugin(
 
         slackAPIToken = None
         slackWebHookUrl = None
+        slackBotToken = None
 
         connection_method = self._settings.get(["connection_method"], merged=True)
         progress_update_method = self._settings.get(
