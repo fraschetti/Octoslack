@@ -34,10 +34,6 @@ import copy
 
 HTTPS_SLACK_API = "https://slack.com/api/"
 
-# The minimum number of seconds between snapshot uploads for progress updates
-# This prevents Slack rate limiting our connection, and flooding the users upstream
-MIN_IMAGE_UPLOAD_DELAY = 60
-
 
 class OctoslackPlugin(
     octoprint.plugin.SettingsPlugin,
@@ -287,6 +283,8 @@ class OctoslackPlugin(
                     "ReportJobProgress": True,
                     "ReportMovieStatus": False,
                     "UpdateMethod": "INPLACE",
+                    # Minimum time in minutes to wait before uploading an image again for a progress upload
+                    "MinImageUpdateDelay": 10,
                     "IntervalPct": 25,
                     "IntervalHeight": 0,
                     "IntervalTime": 0,
@@ -1407,6 +1405,11 @@ class OctoslackPlugin(
         ).get(
             "UpdateMethod"
         )
+        progress_min_delay = 60 * int(
+            self._settings.get(["supported_events"], merged=True).get("Progress").get(
+                "MinImageUpdateDelay"
+            )
+        )
         self._logger.debug("Slack connection method: " + connection_method)
 
         if connection_method == "APITOKEN":
@@ -1476,7 +1479,7 @@ class OctoslackPlugin(
                         ):
                             snapshot_msg = None
                         else:
-                            self._bot_image_next_post_time = time.time() + MIN_IMAGE_UPLOAD_DELAY
+                            self._bot_image_next_post_time = time.time() + progress_min_delay
                             snapshot_msg = {
                                 "token": slackBotToken,
                                 "title": "%s snapshot at %s"
@@ -1642,7 +1645,7 @@ class OctoslackPlugin(
                             resp = self.bot_post_file(snapshot_msg, filedata)
                             if event == "Progress":
                                 # bump out the delay again as an upload can take some time
-                                self._bot_image_next_post_time = time.time() + MIN_IMAGE_UPLOAD_DELAY
+                                self._bot_image_next_post_time = time.time() + progress_min_delay
                                 if self._bot_progress_image:
                                     self.bot_delete_file(
                                         self._bot_progress_image, slackBotToken

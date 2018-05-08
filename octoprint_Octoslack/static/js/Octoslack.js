@@ -426,6 +426,20 @@ var Octoslack = {
 	        eventHtml.push("            </small>");
 	        eventHtml.push("        </div>");
 	        eventHtml.push("        <br/>");
+                // Min image update delay
+	        eventHtml.push("        <div class='octoprint_config_row'>");
+	        eventHtml.push("            <input type='number' step='any' min='1' max='1440' class='input-mini text-right' id='octoslack_event_" + internalName + "_MinImageUpdateDelay' "
+                    + (useDataBind ? "data-bind='value: settings.plugins.Octoslack.supported_events." + internalName + ".MinImageUpdateDelay'" : "")
+                    + ">");
+	        eventHtml.push("            <div class='octoslack_label octoslack_action_label'>Minimum Image Delay</div>");
+	        eventHtml.push("            <br/>");
+	        eventHtml.push("            <small class='muted'>");
+	        eventHtml.push("                The minumum amount of time (in minutes) that must pass before the next progress image is uploaded. This prevents hitting the Slack API too hard.");
+	        eventHtml.push("            </small>");
+	        eventHtml.push("        </div>");
+	        eventHtml.push("        <br/>");
+
+
                 //IntervalPct
 	        eventHtml.push("        <div class='octoprint_config_row'>");
 	        eventHtml.push("            <input type='number' step='any' min='0' max='99' class='input-mini text-right' id='octoslack_event_" + internalName + "_InvervalPct' "
