@@ -763,26 +763,22 @@ class OctoslackPlugin(
             if estimatedPrintTime == None:
                 estimatedPrintTime = job_state["estimatedPrintTime"]
             if estimatedPrintTime == None:
-                estimatedPrintTime = "N/A"
+                estimatedPrintTimeStr = "N/A"
             else:
-                estimatedPrintTime = self.format_duration(estimatedPrintTime)
-            replacement_params["{remaining_time}"] = estimatedPrintTime
+                estimatedPrintTimeStr = self.format_duration(estimatedPrintTime)
+            estimatedFinish = self.format_eta(estimatedPrintTime)
+            replacement_params["{remaining_time}"] = estimatedPrintTimeStr
 
-            if event == "PrintDone":
+            text_arr.append(
+                self.bold_text()
+                + "Estimated print time"
+                + self.bold_text()
+                + " "
+                + estimatedPrintTimeStr
+            )
+            if event != "PrintDone":
                 text_arr.append(
-                    self.bold_text()
-                    + "Estimated print time"
-                    + self.bold_text()
-                    + " "
-                    + estimatedPrintTime
-                )
-            else:
-                text_arr.append(
-                    self.bold_text()
-                    + "Estimated print time"
-                    + self.bold_text()
-                    + " "
-                    + estimatedPrintTime
+                    self.bold_text() + "ETA" + self.bold_text() + " " + estimatedFinish
                 )
 
         if event == "Progress" and "progress" in event_payload:
@@ -799,11 +795,7 @@ class OctoslackPlugin(
 
         elapsed_str = self.format_duration(elapsed)
         time_left_str = self.format_duration(time_left)
-        if time_left >= 0:
-            eta = datetime.datetime.now() + datetime.timedelta(seconds=time_left)
-            eta_str = "%s %s" % (eta.strftime("%H:%M"), humanize.naturalday(eta))
-        else:
-            eta_str = "N/A"
+        eta_str = self.format_eta(time_left)
 
         if not elapsed == None:
             replacement_params["{elapsed_time}"] = elapsed_str
@@ -1312,6 +1304,14 @@ class OctoslackPlugin(
             return "**"
         else:
             return "*"
+
+    def format_eta(self, seconds):
+        """For a given seconds to complete, returns an ETA string for humans.
+        """
+        if seconds is None:
+            return "N/A"
+        eta = datetime.datetime.now() + datetime.timedelta(seconds=seconds)
+        return "%s %s" % (eta.strftime("%H:%M"), humanize.naturalday(eta))
 
     def format_duration(self, seconds):
         time_format = self._settings.get(["time_format"], merged=True)
