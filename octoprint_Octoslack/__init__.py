@@ -1641,7 +1641,6 @@ class OctoslackPlugin(
                         if snapshot_msg:
                             snapshot_msg["channels"] = slack_msg["channel"]
                             filedata = hosted_url
-                            open("/tmp/img.jpg", "wb").write(filedata)
                             resp = self.bot_post_file(snapshot_msg, filedata)
                             if event == "Progress":
                                 # bump out the delay again as an upload can take some time
