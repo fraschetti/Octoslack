@@ -58,7 +58,13 @@
             <input type="radio" name="octoslack_connection_type" id="octoslack_connection_type_webhook" onclick="Octoslack.changeConnectionType(this.value);" class="octoslack_valign" value="WEBHOOK">
             <span class="octoslack_valign octoslack_action_label" onclick="$('#octoslack_connection_type_webhook').trigger('click')">Slack WebHook URL</span>
         </div>
-	<small class="muted">Most features will be available for both connection methods but some may specifically require use of the API Token</small>
+        <div>
+            <input type="radio" name="octoslack_connection_type" id="octoslack_connection_type_bot" onclick="Octoslack.changeConnectionType(this.value);" class="octoslack_valign" value="BOT">
+            <span class="octoslack_valign octoslack_action_label" onclick="$('#octoslack_connection_type_bot').trigger('click')">Slack Bot</span>
+        </div>
+	<small class="muted">Most features will be available for all connection
+      methods but some may specifically require use of the API Token or Bot. Bot
+    is the preferred method</small>
         <div id="octoslack_apitoken_group" class="octoslack_hidden">
             <br/>
             <div class="octoprint_config_row">
@@ -134,6 +140,22 @@
 		<small class="muted">A WebHook URL can be generated via your Slack team's settings dialog. Apps &amp; integrations --&gt; Manage --&gt; Custom Integrations --&gt; Incoming WebHooks</small>
             </div>
         </div>
+        <div id="octolack_bot_group" class="octoslack_hidden">
+            <br/>
+            <div class="octoprint_config_row">
+                <span class="octoslack_label">Bot User OAuth Access Token</span>
+                <input type="text" class="octoslack_width_auto" size="60"
+                placeholder="xoxb-111111111111-aaaaaaaaaaaaaaaaaaaaaaaa" data-bind="value: settings.plugins.Octoslack.slack_bot_config.token">
+		        </br>
+		        <small class="muted">Create a <a
+                       href="https://api.slack.com/slack-apps" target="_blank">Slack App</a>, and
+                     then add a Bot User (Bot Users --&gt; Add Bot User). Once
+                     created, OAuth &amp; Permissions --&gt; Install App to
+                     Workspace. Once installed, enter the "Bot User OAuth Access
+                     Token" above.
+                </small>
+            </div>
+        </div>
         <h3>Slack channel(s)</h3>
         <div class="octoprint_config_row">
             <div class="octoslack_label">Channel(s)</div>
@@ -142,7 +164,7 @@
 	    <small class="muted">
                 A single channel can be specified or multiple channels can provided via a comma-separated list (channel1,channel2,channel3)
 	        <br/>
-                Optional for WebHooks but required for when using an API Token
+                Optional for WebHooks but required for a Slack Bot or an API Token
             </small>
         </div>
         <h3>Slack identity</h3>
@@ -180,7 +202,10 @@
             <input type="radio" name="octoslackSnapshotUploadMethod" id="octoslackSnapshotUploadMethod_none"  onclick="Octoslack.changeSnapshotUploadMethod(this);" class="octoslack_valign" value="NONE">
             <span class="octoslack_valign octoslack_action_label" onclick="$('#octoslackSnapshotUploadMethod_none').trigger('click')">None</span>
 	    <br/>
-	    <small class="muted">Unfortunately cleanly attaching images to Slack messages requires an external hosting service. If no this option is specified, snapshots will be unavailable</small>
+	    <small class="muted">Unfortunately cleanly attaching images to Slack
+          messages requires an external hosting service if using an API Token or
+          WebHooks. If no this option is specified, snapshots will be
+          unavailable unless using a Slack Bot</small>
         </div>
         <div>
             <input type="radio" name="octoslackSnapshotUploadMethod" id="octoslackSnapshotUploadMethod_imgur" onclick="Octoslack.changeSnapshotUploadMethod(this);" class="octoslack_valign" value="IMGUR">
@@ -199,6 +224,12 @@
             <span class="octoslack_valign octoslack_action_label" onclick="$('#octoslackSnapshotUploadMethod_minio').trigger('click')">Minio S3</span>
 	    <br/>
 	    <small class="muted">Leverage Minio S3 compatible self hostable storage (see <a href="https://minio.io" target="_blank">Minio.io</a>)</small>
+        </div>
+        <div>
+            <input type="radio" name="octoslackSnapshotUploadMethod" id="octoslackSnapshotUploadMethod_bot" onclick="Octoslack.changeSnapshotUploadMethod(this);" class="octoslack_valign" value="BOT">
+            <span class="octoslack_valign octoslack_action_label" onclick="$('#octoslackSnapshotUploadMethod_bot').trigger('click')">Slack Bot</span>
+	    <br/>
+	    <small class="muted">Upload directly to Slack, only applicable for Slack Bot</small>
         </div>
         <div id="octoslack_imgur_group" class="octoslack_hidden">
             <br/>
@@ -396,6 +427,8 @@
 			<br/>
 			<strong>{remaining_time}</strong> - Estimated remaining print time
 			<br/>
+			<strong>{eta}</strong> - Estimated time of day the print will finish
+			<br/>
 			<strong>{current_z}</strong> - Current nozzle Z height
 			<br/>
 			<strong>{error}</strong> - For error/failed events, the error message (if available)
@@ -423,6 +456,8 @@
 			<strong>{elapsed_time}</strong> - Time since start of print
 			<br/>
 			<strong>{remaining_time}</strong> - Estimated remaining print time
+			<br/>
+			<strong>{eta}</strong> - Estimated time of day the print will finish
 			<br/>
 			<strong>{current_z}</strong> - Current nozzle Z height
 			<br/>

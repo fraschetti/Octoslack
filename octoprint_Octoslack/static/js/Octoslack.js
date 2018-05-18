@@ -84,11 +84,13 @@ var Octoslack = {
 
 		$('#octoslack_connection_type_apitoken').attr('disabled', 'disabled');
 		$('#octoslack_connection_type_webhook').attr('disabled', 'disabled');
+		$('#octoslack_connection_type_bot').attr('disabled', 'disabled');
 		
 		$('#octoslack_custom_identity_icon_emoji').attr('disabled', 'disabled');
 	} else {
 		$('#octoslack_connection_type_apitoken').removeAttr('disabled');
 		$('#octoslack_connection_type_webhook').removeAttr('disabled');
+		$('#octoslack_connection_type_bot').removeAttr('disabled');
 		$('#octoslack_custom_identity_icon_emoji').removeAttr('disabled');
 
 	}
@@ -143,15 +145,18 @@ var Octoslack = {
 
     changeConnectionType : function(new_type) {
         var mattermost_enabled = $("#octoslack_mattermost_compatabilty_mode").is(":checked");
-	if(mattermost_enabled)
-		new_type = "WEBHOOK";
+	    if(mattermost_enabled) {
+		    new_type = "WEBHOOK";
+        }
         var mattermost_enabled = $("#octoslack_mattermost_compatabilty_mode").is(":checked");
 
         var apiTokenGroup = $("#octoslack_apitoken_group");
         var webhookGroup = $("#octolack_webhook_group");
+        var botGroup = $("#octolack_bot_group");
 
         apiTokenGroup.attr("class", "octoslack_hidden");
         webhookGroup.attr("class", "octoslack_hidden");
+        botGroup.attr("class", "octoslack_hidden");
 
         switch (new_type) {
             case "APITOKEN":
@@ -159,7 +164,10 @@ var Octoslack = {
                 break;
            case "WEBHOOK":
                  webhookGroup.attr("class", "octoslack_visible");
-                   break;
+                 break;
+           case "BOT":
+                 botGroup.attr("class", "octoslack_visible");
+                 break;
         }
 
         var connection_method_hidden = $("#octoslack_connection_method_hidden");
@@ -403,6 +411,35 @@ var Octoslack = {
             }
 
             if(eventType == "STANDARD" && internalName == "Progress") {
+                // Update method (inplace, or new messagse)
+	        eventHtml.push("        <div class='octoprint_config_row'>");
+	        eventHtml.push("            <select class='octoslack_select' id='octoslack_event_" + internalName + "_UpdateMethod' "
+                    + (useDataBind ? "data-bind='value: settings.plugins.Octoslack.supported_events." + internalName + ".UpdateMethod'" : "")
+                    + ">");
+            eventHtml.push("<option value='INPLACE'>Inplace</option>");
+            eventHtml.push("<option value='NEW_MESSAGE'>New Message</option>");
+            eventHtml.push("</select>");
+	        eventHtml.push("            <div class='octoslack_label octoslack_action_label'>Progress Update Method</div>");
+	        eventHtml.push("            <br/>");
+	        eventHtml.push("            <small class='muted'>");
+	        eventHtml.push('                Only applicable for Slack Bot, if "Inplace" is selected, rather than sending a new message to update the progress, the existing message will be updated in place.');
+	        eventHtml.push("            </small>");
+	        eventHtml.push("        </div>");
+	        eventHtml.push("        <br/>");
+                // Min image update delay
+	        eventHtml.push("        <div class='octoprint_config_row'>");
+	        eventHtml.push("            <input type='number' step='any' min='1' max='1440' class='input-mini text-right' id='octoslack_event_" + internalName + "_MinImageUpdateDelay' "
+                    + (useDataBind ? "data-bind='value: settings.plugins.Octoslack.supported_events." + internalName + ".MinImageUpdateDelay'" : "")
+                    + ">");
+	        eventHtml.push("            <div class='octoslack_label octoslack_action_label'>Minimum Image Delay</div>");
+	        eventHtml.push("            <br/>");
+	        eventHtml.push("            <small class='muted'>");
+	        eventHtml.push("                The minumum amount of time (in minutes) that must pass before the next progress image is uploaded. This prevents hitting the Slack API too hard.");
+	        eventHtml.push("            </small>");
+	        eventHtml.push("        </div>");
+	        eventHtml.push("        <br/>");
+
+
                 //IntervalPct
 	        eventHtml.push("        <div class='octoprint_config_row'>");
 	        eventHtml.push("            <input type='number' step='any' min='0' max='99' class='input-mini text-right' id='octoslack_event_" + internalName + "_InvervalPct' "
