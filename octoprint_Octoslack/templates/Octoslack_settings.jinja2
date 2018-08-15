@@ -63,7 +63,7 @@
             <br/>
             <div class="octoprint_config_row">
                 <span class="octoslack_label">API Token</span>
-                <input type="text" class="octoslack_width_auto" id="octoslack_apitoken" size="60" data-bind="value: settings.plugins.Octoslack.slack_apitoken_config.api_token">
+                <input type="text" class="octoslack_width_auto" id="octoslack_apitoken" size="60" placeholder="xoxb-111111111111-aaaaaaaaaaaaaaaaaaaaaaaa" data-bind="value: settings.plugins.Octoslack.slack_apitoken_config.api_token">
 		</br>
 		<small class="muted">
                     An API Token can be generated via your Slack team's settings dialog.
@@ -199,6 +199,17 @@
             <span class="octoslack_valign octoslack_action_label" onclick="$('#octoslackSnapshotUploadMethod_minio').trigger('click')">Minio S3</span>
 	    <br/>
 	    <small class="muted">Leverage Minio S3 compatible self hostable storage (see <a href="https://minio.io" target="_blank">Minio.io</a>)</small>
+        </div>
+        <div>
+            <input type="radio" name="octoslackSnapshotUploadMethod"
+            id="octoslackSnapshotUploadMethod_slack"
+            onclick="Octoslack.changeSnapshotUploadMethod(this);"
+            class="octoslack_valign" value="SLACK">
+            <span class="octoslack_valign octoslack_action_label"
+              onclick="$('#octoslackSnapshotUploadMethod_slack').trigger('click')">Slack</span>
+	    <br/>
+	    <small class="muted">This will post directly to Slack. The display is not as
+          clean, but saves having to use an extra service</small>
         </div>
         <div id="octoslack_imgur_group" class="octoslack_hidden">
             <br/>
@@ -395,6 +406,8 @@
 			<strong>{elapsed_time}</strong> - Time since start of print
 			<br/>
 			<strong>{remaining_time}</strong> - Estimated remaining print time
+			<br/>
+			<strong>{eta}</strong> - Estimated time of day the print will finish
 			<br/>
 			<strong>{error}</strong> - For error/failed events, the error message (if available)
 		</p>
