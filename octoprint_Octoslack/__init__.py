@@ -1329,7 +1329,7 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 						s3_upload_elapsed = time.time() - s3_upload_start
 						self._logger.debug("Uploaded snapshot to S3 in " + str(round(s3_upload_elapsed, 2)) + " seconds")
 
-						return "https://s3.amazonaws.com/" + s3Bucket + "/" + uploadFilename, snapshot_errors
+						return "https://" + s3Bucket + ".s3.amazonaws.com/" + uploadFilename, snapshot_errors
 					except Exception as e:
 						self._logger.exception("Failed to upload snapshot to S3: " + str(e))
 						snapshot_errors.append("S3 error: " + str(e))
