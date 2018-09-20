@@ -642,8 +642,14 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 			"{elapsed_time}" : "N/A",
 			"{remaining_time}" : "N/A",
 			"{error}" : "N/A",
-			"{cmd" : "N/A",
+			"{cmd}" : "N/A",
+			"{ip_address}" : "N/A",
 		}
+
+		try:
+			replacement_params['{ip_address}'] = [(s.connect((self._settings.global_get(["server","onlineCheck","host"]), self._settings.global_get(["server","onlineCheck","port"]))), s.getsockname()[0], s.close()) for s in [socket.socket(socket.AF_INET, socket.SOCK_DGRAM)]][0][1]
+		except:
+			replacement_params['{ip_address}'] = "'IP Detect Error'"
 
 		printer_data = self._printer.get_current_data()
 		printer_state = printer_data['state']
