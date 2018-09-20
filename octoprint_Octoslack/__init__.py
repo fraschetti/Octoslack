@@ -31,6 +31,7 @@ import math
 import re
 import subprocess
 import copy
+import socket
 
 
 class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
