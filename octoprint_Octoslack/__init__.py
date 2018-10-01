@@ -32,6 +32,8 @@ import re
 import subprocess
 import copy
 
+SLACKER_TIMEOUT = 60
+
 
 class OctoslackPlugin(
     octoprint.plugin.SettingsPlugin,
@@ -282,6 +284,9 @@ class OctoslackPlugin(
                     "ReportJobOrigEstimate": False,
                     "ReportJobProgress": True,
                     "ReportMovieStatus": False,
+                    "UpdateMethod": "INPLACE",
+                    # Minimum time in minutes to wait before uploading an image again for a progress upload
+                    "MinImageUpdateDelay": 10,
                     "IntervalPct": 25,
                     "IntervalHeight": 0,
                     "IntervalTime": 0,
@@ -442,6 +447,10 @@ class OctoslackPlugin(
         self.start_rtm_client()
         self._logger.debug("Started Slack RTM client")
 
+        self._bot_progress_req = None
+        self._bot_progress_image = None
+        self._bot_image_next_post_time = 0
+
         self.update_gcode_listeners()
 
     ##~~ ShutdownPlugin mixin
@@ -470,9 +479,10 @@ class OctoslackPlugin(
 
             if (
                 progress > 0
+                and progress < 100
                 and progress_interval > 0
                 and progress % progress_interval == 0
-            ) or progress == 100:
+            ):
                 self.handle_event("Progress", None, {"progress": progress}, False, None)
         except Exception as e:
             self._logger.exception(
@@ -755,17 +765,23 @@ class OctoslackPlugin(
                 estimatedPrintTime = job_state["estimatedPrintTime"]
             if estimatedPrintTime == None:
                 estimatedPrintTime = "N/A"
+                estimatedPrintTimeStr = "N/A"
             else:
-                estimatedPrintTime = self.format_duration(estimatedPrintTime)
-            replacement_params["{remaining_time}"] = estimatedPrintTime
+                estimatedPrintTimeStr = self.format_duration(estimatedPrintTime)
+            estimatedFinish = self.format_eta(estimatedPrintTime)
+            replacement_params["{remaining_time}"] = estimatedPrintTimeStr
 
-            if event == "PrintDone":
+            text_arr.append(
+                self.bold_text()
+                + "Estimated print time"
+                + self.bold_text()
+                + " "
+                + estimatedPrintTimeStr
+            )
+
+            if event != "PrintDone":
                 text_arr.append(
-                    self.bold_text()
-                    + "Estimated print time"
-                    + self.bold_text()
-                    + " "
-                    + estimatedPrintTime
+                        self.bold_text() + "ETA" + self.bold_text() + " " + estimatedFinish
                 )
             else:
                 text_arr.append(
@@ -773,7 +789,7 @@ class OctoslackPlugin(
                     + "Estimated print time"
                     + self.bold_text()
                     + " "
-                    + estimatedPrintTime
+                    + estimatedPrintTimeStr
                 )
 
         if event == "Progress" and "progress" in event_payload:
@@ -790,11 +806,13 @@ class OctoslackPlugin(
 
         elapsed_str = self.format_duration(elapsed)
         time_left_str = self.format_duration(time_left)
+        eta_str = self.format_eta(time_left)
 
         if not elapsed == None:
             replacement_params["{elapsed_time}"] = elapsed_str
         if not time_left == None:
             replacement_params["{remaining_time}"] = time_left_str
+            replacement_params["{eta}"] = eta_str
 
         if reportJobProgress and not pct_complete == None:
             text_arr.append(
@@ -803,6 +821,7 @@ class OctoslackPlugin(
             text_arr.append(
                 self.bold_text() + "Remaining" + self.bold_text() + " " + time_left_str
             )
+            text_arr.append(self.bold_text() + "ETA" + self.bold_text() + " " + eta_str)
 
             ##Is rendered as a footer so it's safe to always include this
         if reportPrinterState:
@@ -1028,7 +1047,7 @@ class OctoslackPlugin(
 
     def execute_rtm_loop(self, slackAPIToken):
         try:
-            slackAPIConnection = Slacker(slackAPIToken)
+            slackAPIConnection = Slacker(slackAPIToken, timeout=SLACKER_TIMEOUT)
 
             auth_rsp = slackAPIConnection.auth.test()
             self._logger.debug(
@@ -1059,13 +1078,12 @@ class OctoslackPlugin(
                                     self.process_rtm_message(slackAPIToken, msg)
                                 except Exception as e:
                                     self._logger.error(
-                                        "RPM message processing error: "
-                                        + str(e.message)
+                                        "RTM message processing error: " + str(e)
                                     )
                         time.sleep(1)
                     except WebSocketConnectionClosedException as ce:
                         self._logger.error(
-                            "RPM API read error (WebSocketConnectionClosedException): "
+                            "RTM API read error (WebSocketConnectionClosedException): "
                             + str(ce.message)
                         )
                         time.sleep(5 * 1000)
@@ -1078,7 +1096,7 @@ class OctoslackPlugin(
                             break
                     except Exception as e:
                         self._logger.error(
-                            "RPM API read error (Exception): " + str(e.message)
+                            "RTM API read error (Exception): " + str(e)
                         )
                         time.sleep(5 * 1000)
             else:
@@ -1086,7 +1104,7 @@ class OctoslackPlugin(
 
             self._logger.debug("Finished Slack RTM wait loop")
         except Exception as e:
-            self._logger.exception("Error in rtm loop, Error: " + str(e.message))
+            self._logger.exception("Error in rtm loop, Error: " + str(e))
 
     def process_rtm_message(self, slackAPIToken, message):
         if not self._settings.get(["slack_apitoken_config"], merged=True).get(
@@ -1097,17 +1115,12 @@ class OctoslackPlugin(
         if self.bot_user_id == None or message == None:
             return
 
-        if (
-            not "type" in message
-            or message["type"] == None
-            or message["type"] != "message"
-            or message["text"] == None
-        ):
+        if message.get("type") != "message" or message.get("text") == None:
             return
 
         bot_id = "<@" + self.bot_user_id + ">"
 
-        if not bot_id in message["text"]:
+        if not bot_id in message.get("text", ""):
             return
 
         self._logger.debug("Slack RTM Read: " + json.dumps(message))
@@ -1224,7 +1237,7 @@ class OctoslackPlugin(
             if len(reaction) == 0:
                 return
 
-            slackAPIConnection = Slacker(slackAPIToken)
+            slackAPIConnection = Slacker(slackAPIToken, timeout=SLACKER_TIMEOUT)
 
             self._logger.debug(
                 "Sending Slack RTM reaction - Channel: "
@@ -1291,6 +1304,14 @@ class OctoslackPlugin(
             return "**"
         else:
             return "*"
+
+    def format_eta(self, seconds):
+        """For a given seconds to complete, returns an ETA string for humans.
+        """
+        if seconds is None:
+            return "N/A"
+        eta = datetime.datetime.now() + datetime.timedelta(seconds=seconds)
+        return "%s %s" % (eta.strftime("%H:%M"), humanize.naturalday(eta))
 
     def format_duration(self, seconds):
         time_format = self._settings.get(["time_format"], merged=True)
@@ -1375,6 +1396,16 @@ class OctoslackPlugin(
         slackWebHookUrl = None
 
         connection_method = self._settings.get(["connection_method"], merged=True)
+        progress_update_method = (
+            self._settings.get(["supported_events"], merged=True)
+            .get("Progress")
+            .get("UpdateMethod")
+        )
+        progress_min_delay = 60 * int(
+            self._settings.get(["supported_events"], merged=True)
+            .get("Progress")
+            .get("MinImageUpdateDelay")
+        )
         self._logger.debug("Slack connection method: " + connection_method)
 
         if connection_method == "APITOKEN":
@@ -1402,11 +1433,12 @@ class OctoslackPlugin(
         attachment["mrkdwn_in"] = ["text", "pretext"]
 
         snapshot_url_to_append = None
+        snapshot_msg = None
 
         if includeSnapshot:
             hosted_url, snapshot_errors = self.upload_snapshot()
 
-            if not snapshot_errors == None and len(snapshot_errors) > 0:
+            if snapshot_errors:
                 if text == None:
                     text = ""
                 elif len(text) > 0:
@@ -1422,11 +1454,31 @@ class OctoslackPlugin(
                         text += "\n *-* "
                         text += snapshot_error
 
-            if not hosted_url == None:
-                attachment["image_url"] = hosted_url
-
-                if self.mattermost_mode():
-                    snapshot_url_to_append = hosted_url
+            if hosted_url:
+                if (
+                    self._settings.get(["snapshot_upload_method"], merged=True)
+                    == "SLACK"
+                ):
+                    if slackAPIToken:
+                        if (
+                            event == "Progress"
+                            and time.time() < self._bot_image_next_post_time
+                        ):
+                            snapshot_msg = None
+                        else:
+                            self._bot_image_next_post_time = (
+                                time.time() + progress_min_delay
+                            )
+                            snapshot_msg = {
+                                "file_": hosted_url,
+                                "filename": "image.jpg",
+                                "title": "%s snapshot at %s"
+                                % (event, time.strftime("%X")),
+                            }
+                else:
+                    attachment["image_url"] = hosted_url
+                    if self.mattermost_mode():
+                        snapshot_url_to_append = hosted_url
 
         if self.mattermost_mode() and not footer == None and len(footer) > 0:
             if text == None:
@@ -1503,21 +1555,62 @@ class OctoslackPlugin(
 
             allow_empty_channel = False
 
-            if not slackAPIToken == None and len(slackAPIToken) > 0:
+            if slackAPIToken:
                 try:
-                    slackAPIConnection = Slacker(slackAPIToken)
+                    slackAPIConnection = Slacker(slackAPIToken, timeout=SLACKER_TIMEOUT)
 
-                    apiRsp = slackAPIConnection.chat.post_message(
-                        channel,
-                        text="",
-                        username=slack_username,
-                        as_user=slack_as_user,
-                        attachments=attachments_json,
-                        icon_url=slack_icon_url,
-                        icon_emoji=slack_icon_emoji,
-                    )
-
+                    if event == "Progress":
+                        if (
+                            self._bot_progress_req
+                            and progress_update_method == "INPLACE"
+                        ):
+                            apiRsp = slackAPIConnection.chat.update(
+                                self._bot_progress_req.body["channel"],
+                                ts=self._bot_progress_req.body["ts"],
+                                text="",
+                                attachments=attachments_json,
+                            )
+                        else:
+                            apiRsp = slackAPIConnection.chat.post_message(
+                                channel,
+                                text="",
+                                username=slack_username,
+                                as_user=slack_as_user,
+                                attachments=attachments_json,
+                                icon_url=slack_icon_url,
+                                icon_emoji=slack_icon_emoji,
+                            )
+                            self._bot_progress_req = apiRsp
+                    else:
+                        self._bot_progress_req = None
+                        self._bot_progress_image = None
+                        apiRsp = slackAPIConnection.chat.post_message(
+                            channel,
+                            text="",
+                            username=slack_username,
+                            as_user=slack_as_user,
+                            attachments=attachments_json,
+                            icon_url=slack_icon_url,
+                            icon_emoji=slack_icon_emoji,
+                        )
                     self._logger.debug("Slack API message send response: " + apiRsp.raw)
+
+                    if snapshot_msg:
+                        snapshot_msg["channels"] = channel
+                        resp = slackAPIConnection.files.upload(**snapshot_msg)
+                        if event == "Progress":
+                            # bump out the delay again as an upload can take some time
+                            self._bot_image_next_post_time = (
+                                time.time() + progress_min_delay
+                            )
+                            if self._bot_progress_image:
+                                try:
+                                    fid = self._bot_progress_image.body["file"]["id"]
+                                    slackAPIConnection.files.delete(fid)
+                                except Exception as e:
+                                    self._logger.error("Image key error: {}".format(e))
+                            self._bot_progress_image = resp
+
                 except Exception as e:
                     self._logger.exception("Slack API message send error: " + str(e))
             elif not slackWebHookUrl == None and len(slackWebHookUrl) > 0:
@@ -1763,6 +1856,9 @@ class OctoslackPlugin(
                             "Failed to upload snapshot to Imgur (Exception): " + str(e)
                         )
                         snapshot_errors.append("Imgur error: " + str(e))
+                elif snapshot_upload_method == "SLACK":
+                    # Return the file object, the bot post will upload
+                    return open(local_file_path, "rb"), None
             except Exception as e:
                 self._logger.exception("Snapshot capture error: %s" % str(e))
                 snapshot_errors.append("Snapshot error: " + str(e.message))
@@ -2257,3 +2353,41 @@ def __plugin_load__():
         "octoprint.plugin.softwareupdate.check_config": __plugin_implementation__.get_update_information,
         "octoprint.comm.protocol.gcode.sending": __plugin_implementation__.sending_gcode,
     }
+
+
+# Monkey patch Slacker as it does not allow uploading via a passed filehandle
+import types
+import slacker
+
+
+def typedupload(
+    self,
+    file_=None,
+    content=None,
+    filetype=None,
+    filename=None,
+    title=None,
+    initial_comment=None,
+    channels=None,
+):
+    if isinstance(channels, (tuple, list)):
+        channels = ",".join(channels)
+
+    data = {
+        "content": content,
+        "filetype": filetype,
+        "filename": filename,
+        "title": title,
+        "initial_comment": initial_comment,
+        "channels": channels,
+    }
+
+    if file_:
+        if type(file_) in types.StringTypes:
+            file_ = open(file_, "rb")
+        return self.post("files.upload", data=data, files={"file": file_})
+    else:
+        return self.post("files.upload", data=data)
+
+
+slacker.Files.upload = typedupload

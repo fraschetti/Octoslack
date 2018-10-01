@@ -403,6 +403,33 @@ var Octoslack = {
             }
 
             if(eventType == "STANDARD" && internalName == "Progress") {
+                // Update method (inplace, or new messagse)
+	        eventHtml.push("        <div class='octoprint_config_row'>");
+	        eventHtml.push("            <select class='octoslack_select' id='octoslack_event_" + internalName + "_UpdateMethod' "
+                    + (useDataBind ? "data-bind='value: settings.plugins.Octoslack.supported_events." + internalName + ".UpdateMethod'" : "")
+                    + ">");
+            eventHtml.push("<option value='INPLACE'>Inplace</option>");
+            eventHtml.push("<option value='NEW_MESSAGE'>New Message</option>");
+            eventHtml.push("</select>");
+	        eventHtml.push("            <div class='octoslack_label octoslack_action_label'>Progress Update Method</div>");
+	        eventHtml.push("            <br/>");
+	        eventHtml.push("            <small class='muted'>");
+	        eventHtml.push('                Only applicable for Slack API Token, if "Inplace" is selected, rather than sending a new message to update the progress, the existing message will be updated in place.');
+	        eventHtml.push("            </small>");
+	        eventHtml.push("        </div>");
+	        eventHtml.push("        <br/>");
+                // Min image update delay
+	        eventHtml.push("        <div class='octoprint_config_row'>");
+	        eventHtml.push("            <input type='number' step='any' min='1' max='1440' class='input-mini text-right' id='octoslack_event_" + internalName + "_MinImageUpdateDelay' "
+                    + (useDataBind ? "data-bind='value: settings.plugins.Octoslack.supported_events." + internalName + ".MinImageUpdateDelay'" : "")
+                    + ">");
+	        eventHtml.push("            <div class='octoslack_label octoslack_action_label'>Minimum Image Delay</div>");
+	        eventHtml.push("            <br/>");
+	        eventHtml.push("            <small class='muted'>");
+	        eventHtml.push("                The minumum amount of time (in minutes) that must pass before the next progress image is uploaded. This prevents hitting the Slack API too hard.");
+	        eventHtml.push("            </small>");
+	        eventHtml.push("        </div>");
+	        eventHtml.push("        <br/>");
                 //IntervalPct
 	        eventHtml.push("        <div class='octoprint_config_row'>");
 	        eventHtml.push("            <input type='number' step='any' min='0' max='99' class='input-mini text-right' id='octoslack_event_" + internalName + "_InvervalPct' "
