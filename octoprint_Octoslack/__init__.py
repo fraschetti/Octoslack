@@ -53,8 +53,8 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 
 	##~~ SettingsPlugin mixin
 
- 	def get_settings_defaults(self):
- 		return {
+	def get_settings_defaults(self):
+		return {
 			"connection_method" : "APITOKEN", ##APITOKEN or WEBHOOK
 			"slack_apitoken_config" : {
 				"api_token" : "",
@@ -393,7 +393,7 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 		return 1
 
 	def on_settings_save(self, data):
-        	octoprint.plugin.SettingsPlugin.on_settings_save(self, data)
+		octoprint.plugin.SettingsPlugin.on_settings_save(self, data)
 		self.update_progress_timer()
 		self.update_gcode_listeners()
 
@@ -444,9 +444,9 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 	##~~ StartupPlugin mixin
 
 	def on_after_startup(self):
-        	self._logger.debug("Starting Slack RTM client")
+		self._logger.debug("Starting Slack RTM client")
 		self.start_rtm_client()
-        	self._logger.debug("Started Slack RTM client")
+		self._logger.debug("Started Slack RTM client")
 
 		self.update_gcode_listeners()
 
@@ -456,7 +456,7 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 	def on_shutdown(self):
 		self.stop_rtm_client()
 
-        	self._logger.debug("Stopped Slack RTM client")
+		self._logger.debug("Stopped Slack RTM client")
 
 
 	##~~ PrintProgress mixin
@@ -477,7 +477,7 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 
 	def progress_timer_tick(self):
 		self._logger.debug("Progress timer tick")
- 		self.handle_event("Progress", None, {}, False, None)
+		self.handle_event("Progress", None, {}, False, None)
 
 	print_cancel_time = None
 	progress_timer = None
@@ -847,10 +847,10 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 		ips = []
 		try:
 			for interface in netifaces.interfaces():
-        			for link in netifaces.ifaddresses(interface).get(netifaces.AF_INET, ()):
+				for link in netifaces.ifaddresses(interface).get(netifaces.AF_INET, ()):
 					addr = link['addr']
 					if addr == None or len(addr.strip()) == 0 or addr != '127.0.0.1':
-            					ips.append(addr)
+						ips.append(addr)
 		except Exception as e:
 			self._logger.exception("Failed to query IP address: " + str(e))
 
@@ -881,8 +881,8 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 		self.bot_user_id = None
 
 		t = threading.Thread(target=self.execute_rtm_loop, args=(slackAPIToken,))
-                t.setDaemon(True)
-                t.start()
+		t.setDaemon(True)
+		t.start()
 
 		self._logger.debug("After Slack RTM client start")
 
@@ -988,7 +988,7 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 
 		if command == "help":
 			self._logger.debug("Slack RTM - help command")
- 			self.handle_event("Help", channel, {}, True, None)
+			self.handle_event("Help", channel, {}, True, None)
 			reaction = positive_reaction
 			
 		elif command == "stop":
@@ -1030,7 +1030,7 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 			sent_processing_reaction = True
 
 			self.add_message_reaction(slackAPIToken, channel, timestamp, processing_reaction, False)
- 			self.handle_event("Progress", channel, {}, True, None)
+			self.handle_event("Progress", channel, {}, True, None)
 			reaction = positive_reaction
 
 		else:
