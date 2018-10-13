@@ -31,7 +31,7 @@ import math
 import re
 import subprocess
 import copy
-import socket
+import netifaces
 
 
 class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
@@ -647,11 +647,6 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 			"{ip_address}" : "N/A",
 		}
 
-		try:
-			replacement_params['{ip_address}'] = [(s.connect((self._settings.global_get(["server","onlineCheck","host"]), self._settings.global_get(["server","onlineCheck","port"]))), s.getsockname()[0], s.close()) for s in [socket.socket(socket.AF_INET, socket.SOCK_DGRAM)]][0][1]
-		except:
-			replacement_params['{ip_address}'] = "'IP Detect Error'"
-
 		printer_data = self._printer.get_current_data()
 		printer_state = printer_data['state']
 		job_state = printer_data['job']
@@ -802,6 +797,11 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 			if not print_filename == None:
 				text_arr.append(self.bold_text() + "Print job" + self.bold_text() + " " + print_filename)
 
+		ips = self.get_ips()
+		ips_str = ", ".join(ips)
+		self._logger.debug("IPs: " +  ips_str)
+		replacement_params['{ip_address}'] = ips_str
+
 		if includeSupportedCommands:
 			 text_arr.append(self.bold_text() + "help" + self.bold_text() + " - Displays this list of commands")
 			 text_arr.append(self.bold_text() + "status" + self.bold_text() + " - Display the current print job status")
@@ -841,6 +841,23 @@ class OctoslackPlugin(octoprint.plugin.SettingsPlugin,
 
 		t = threading.Thread(target=self.send_slack_message, args=(event, channel_override, fallback, pretext, title, text, color, fields, footer, includeSnapshot))
 		t.start()
+
+	#Currrently only querying IPv4 although the library supports IPv6 as well
+	def get_ips(self):
+		ips = []
+		try:
+			for interface in netifaces.interfaces():
+        			for link in netifaces.ifaddresses(interface).get(netifaces.AF_INET, ()):
+					addr = link['addr']
+					if addr == None or len(addr.strip()) == 0 or addr != '127.0.0.1':
+            					ips.append(addr)
+		except Exception as e:
+			self._logger.exception("Failed to query IP address: " + str(e))
+
+			ips = []
+			ips.append("'IP detection error'")
+
+		return ips
 				
 	def start_rtm_client(self):
 		self.stop_rtm_client()
