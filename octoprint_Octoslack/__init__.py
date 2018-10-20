@@ -785,14 +785,6 @@ class OctoslackPlugin(
                 text_arr.append(
                     self.bold_text() + "ETA" + self.bold_text() + " " + estimatedFinish
                 )
-            else:
-                text_arr.append(
-                    self.bold_text()
-                    + "Estimated print time"
-                    + self.bold_text()
-                    + " "
-                    + estimatedPrintTimeStr
-                )
 
         if event == "Progress" and "progress" in event_payload:
             pct_complete = event_payload["progress"]
