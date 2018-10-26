@@ -32,6 +32,7 @@ import re
 import subprocess
 import copy
 import netifaces
+import pytz
 
 SLACKER_TIMEOUT = 60
 
@@ -373,6 +374,9 @@ class OctoslackPlugin(
                 },
             },
             "gcode_events": "",
+            "timezones": "|".join(pytz.common_timezones),
+            "timezone": "OS_Default",
+            "eta_date_format": "yyyy-MM-dd HH:mm",
         }
 
     def get_settings_restricted_paths(self):
@@ -404,10 +408,10 @@ class OctoslackPlugin(
         self.update_progress_timer()
         self.update_gcode_listeners()
 
-        ##~ TemplatePlugin mixin
+    ##~ TemplatePlugin mixin
 
-        ##def get_template_vars(self):
-        ##	return dict()
+    ##def get_template_vars(self):
+    ##   	return dict()
 
     def get_template_configs(self):
         return [dict(type="settings", custom_bindings=False)]
@@ -710,6 +714,7 @@ class OctoslackPlugin(
             "{current_z}": "N/A",
             "{elapsed_time}": "N/A",
             "{remaining_time}": "N/A",
+            "{eta}": "N/A",
             "{error}": "N/A",
             "{cmd}": "N/A",
             "{ip_address}": "N/A",
@@ -770,8 +775,11 @@ class OctoslackPlugin(
                 estimatedPrintTimeStr = "N/A"
             else:
                 estimatedPrintTimeStr = self.format_duration(estimatedPrintTime)
+
             estimatedFinish = self.format_eta(estimatedPrintTime)
+
             replacement_params["{remaining_time}"] = estimatedPrintTimeStr
+            replacement_params["{eta}"] = estimatedFinish
 
             text_arr.append(
                 self.bold_text()
@@ -799,12 +807,22 @@ class OctoslackPlugin(
         time_left = progress_state["printTimeLeft"]
 
         elapsed_str = self.format_duration(elapsed)
-        time_left_str = self.format_duration(time_left)
-        eta_str = self.format_eta(time_left)
 
         replacement_params["{elapsed_time}"] = elapsed_str
-        replacement_params["{remaining_time}"] = time_left_str
-        replacement_params["{eta}"] = eta_str
+
+        ##Use existing remaining time if it's already been set
+        if replacement_params["{remaining_time}"] == "N/A":
+            time_left_str = self.format_duration(time_left)
+            replacement_params["{remaining_time}"] = time_left_str
+        else:
+            time_left_str = replacement_params["{remaining_time}"]
+
+        ##Use existing ETA if it's already been set
+        if replacement_params["{eta}"] == "N/A":
+            eta_str = self.format_eta(time_left)
+            replacement_params["{eta}"] = eta_str
+        else:
+            eta_str = replacement_params["{eta}"]
 
         if reportJobProgress and not pct_complete == None:
             text_arr.append(
@@ -1323,8 +1341,37 @@ class OctoslackPlugin(
         """
         if seconds is None:
             return "N/A"
-        eta = datetime.datetime.now() + datetime.timedelta(seconds=seconds)
-        return "%s %s" % (eta.strftime("%H:%M"), humanize.naturalday(eta))
+
+        tz_config = self._settings.get(["timezone"], merged=True)
+
+        local_eta = datetime.datetime.now() + datetime.timedelta(seconds=seconds)
+
+        ##Return local OS timestamp
+        if not tz_config or tz_config == "OS_Default":
+            eta = local_eta
+        else:
+            ##Generate TZ adjusted timestamp
+            tz = pytz.timezone(tz_config)
+            utc_time = datetime.datetime.utcnow().replace(tzinfo=pytz.utc)
+            eta = utc_time.astimezone(tz)
+
+        ##Config UI string, not an actual python date/time format string
+        selected_date_format = self._settings.get(["eta_date_format"], merged=True)
+
+        if selected_date_format == "HH:mm <fuzzy date>":
+            return "%s %s" % (eta.strftime("%H:%M"), humanize.naturalday(local_eta))
+        elif selected_date_format == "hh:mm tt <fuzzy date>":
+            return "%s %s" % (eta.strftime("%I:%M %p"), humanize.naturalday(local_eta))
+        elif selected_date_format == "MM/dd/yyyy HH:mm":
+            return eta.strftime("%m/%d/%Y %H:%M")
+        elif selected_date_format == "dd/MM/yyyy HH:mm":
+            return eta.strftime("%d/%m/%Y %H:%M")
+        elif selected_date_format == "MM/dd/yyyy hh:mm tt":
+            return eta.strftime("%m/%d/%Y %I:%M %p")
+        elif selected_date_format == "dd/MM/yyyy hh:mm tt":
+            return eta.strftime("%d/%m/%Y %I:%M %p")
+        else:
+            return eta.strftime("%Y-%m-%d %H:%M")
 
     def format_duration(self, seconds):
         time_format = self._settings.get(["time_format"], merged=True)

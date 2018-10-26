@@ -8,13 +8,51 @@
 	    <small class="muted">Include the Raspberry Pi temperature alongside printer temperatures</small>
 	</div>
 	<div class="octoprint_config_row">
-            <div class="octoslack_label">Time format</div>
+            <div class="octoslack_label">Duration time format</div>
 	    <select data-bind="value: settings.plugins.Octoslack.time_format" class="octoslack_select">
                 <option value="HUMAN">Human exact</option>
                 <option value="FUZZY">Human fuzzy</option>
                 <option value="EXACT">Compact exact</option>
             </select>
 	    <br/>
+	    <small class="muted">
+                The format for displaying duration values (time elapsed and time remaining)
+            </small>
+	    <p class="octoslack_indented">
+	        <small class="muted">
+	    	    <strong>Human exact</strong> - "H hours, M minutes, S seconds"
+	            <br/>
+	            <strong>Human fuzzy</strong> - "an hour"
+	            <br/>
+	            <strong>Compact exact</strong> - "HH:MM:SS"
+	        </small>
+	    </p>
+	</div>
+	<div class="octoprint_config_row">
+            <div class="octoslack_label">ETA timestamp time zone</div>
+            <select id="octoslack_timezones" class="octoslack_select" onchange="Octoslack.timezone_change();"></select>
+	    <input type="hidden" id="octoslack_timezones_hidden" data-bind="value: settings.plugins.Octoslack.timezones">
+	    <input type="hidden" id="octoslack_timezone_hidden" data-bind="value: settings.plugins.Octoslack.timezone">
+	    <small class="muted">
+                <br/>
+                test
+            </small>
+	</div>
+	<div class="octoprint_config_row">
+            <div class="octoslack_label">ETA date/time format</div>
+	    <select data-bind="value: settings.plugins.Octoslack.eta_date_format" class="octoslack_select">
+                <option>HH:mm &lt;fuzzy date&gt;</option>
+                <option>hh:mm tt &lt;fuzzy date&gt;</option>
+                <option>yyyy-MM-dd HH:mm</option>
+                <option>MM/dd/yyyy HH:mm</option>
+                <option>dd/MM/yyyy HH:mm</option>
+                <option>MM/dd/yyyy hh:mm tt</option>
+                <option>dd/MM/yyyy hh:mm tt</option>
+            </select>
+	    <br/>
+	    <small class="muted">
+                The format for displaying the print ETA date/time
+            </small>
 	    <p class="octoslack_indented">
 	        <small class="muted">
 	    	    <strong>Human exact</strong> - "H hours, M minutes, S seconds"

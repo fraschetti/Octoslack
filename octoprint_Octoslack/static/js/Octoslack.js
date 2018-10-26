@@ -46,6 +46,7 @@ var Octoslack = {
         this.buildSnapshotURLsTable();
         this.buildGcodeEventsTable();
 	this.applyMattermostChanges();
+	this.populateTimezones();
 
 	this.last_connection_method = $("#octoslack_connection_method_hidden").val();
 	this.last_bot_commands = $("#octoslack_bot_commands").is(":checked");
@@ -92,6 +93,37 @@ var Octoslack = {
 		$('#octoslack_custom_identity_icon_emoji').removeAttr('disabled');
 
 	}
+    },
+
+    populateTimezones : function() {
+        var timezones_str = $("#octoslack_timezones_hidden").val();
+        var timezones_arr = timezones_str.split('|');
+
+        var timezones_select = $("#octoslack_timezones");
+
+        timezones_select.append($('<option>', {
+            value: 'OS_Default',
+            text: 'OS_Default',
+        }));
+
+        for(var i = 0; i < timezones_arr.length; i++) {
+            var opt = timezones_arr[i];
+
+            timezones_select.append($('<option>', {
+                value: opt,
+                text: opt,
+            }));
+        }
+
+        var selected_timezone = $("#octoslack_timezone_hidden").val();
+        timezones_select.val(selected_timezone);
+    },
+
+    timezone_change : function() {
+        var selected_timezone = $("#octoslack_timezones").val();
+
+        $("#octoslack_timezone_hidden").val(selected_timezone);
+        $("#octoslack_timezone_hidden").trigger('change');
     },
 
     beforeSave : function() {
