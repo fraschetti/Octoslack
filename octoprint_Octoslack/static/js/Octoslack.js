@@ -324,6 +324,7 @@ var Octoslack = {
 		{ "InternalName" : "PrintResumed", "DisplayName" : "Print resumed" },
 		{ "InternalName" : "PrintDone", "DisplayName" : "Print finished" },
 		{ "InternalName" : "Progress", "DisplayName" : "Print progress" },
+		{ "InternalName" : "Heartbeat", "DisplayName" : "Printer status heartbeat" },
 		{ "InternalName" : "MovieRendering", "DisplayName" : "Timelapse render started" },
 		{ "InternalName" : "MovieDone", "DisplayName" : "Timelapse render finished" },
 		{ "InternalName" : "MovieFailed", "DisplayName" : "Timelapse render failed" },
@@ -472,7 +473,7 @@ var Octoslack = {
 	        eventHtml.push("            <small class='muted'>");
 	        eventHtml.push("                0 = disabled");
 	        eventHtml.push("                <br/>");
-	        eventHtml.push("                A value of 5 would indicate report progress should be logged at 5%, 10%, 15%, etc.");
+	        eventHtml.push("                A value of 5 would indicate report progress should be sent at 5%, 10%, 15%, etc.");
 	        eventHtml.push("            </small>");
 	        eventHtml.push("        </div>");
 	        eventHtml.push("        <br/>");
@@ -487,7 +488,7 @@ var Octoslack = {
 	        eventHtml.push("            <small class='muted'>");
 	        eventHtml.push("                0 = disabled");
 	        eventHtml.push("                <br/>");
-	        eventHtml.push("                A value of 50 would indicate report progress should be logged each time the nozzle height has raised an additional 50mm");
+	        eventHtml.push("                A value of 50 would indicate report progress should be sent each time the nozzle height has raised an additional 50mm");
 	        eventHtml.push("            </small>");
 	        eventHtml.push("        </div>");
 	        eventHtml.push("        <br/>");
@@ -503,7 +504,24 @@ var Octoslack = {
 	        eventHtml.push("            <small class='muted'>");
 	        eventHtml.push("                0 = disabled");
 	        eventHtml.push("                <br/>");
-	        eventHtml.push("                A value of 5 would indicate report progress should be logged every 5 minutes ");
+	        eventHtml.push("                A value of 5 would indicate report progress should be sent every 5 minutes ");
+	        eventHtml.push("            </small>");
+	        eventHtml.push("        </div>");
+	        eventHtml.push("        <br/>");
+            }
+
+            if(eventType == "STANDARD" && internalName == "Heartbeat") {
+                //IntervalTime
+	        eventHtml.push("        <div class='octoprint_config_row'>");
+	        eventHtml.push("            <input type='number' step='any' min='0' class='input-mini text-right' id='octoslack_event_" + internalName + "_IntervalTime' "
+                    + (useDataBind ? "data-bind='value: settings.plugins.Octoslack.supported_events." + internalName + ".IntervalTime'" : "")
+                    + ">");
+	        eventHtml.push("            <div class='octoslack_label octoslack_action_label'>Interval - Time (minutes)</div>");
+	        eventHtml.push("            <br/>")
+	        eventHtml.push("            <small class='muted'>");
+	        eventHtml.push("                0 = disabled");
+	        eventHtml.push("                <br/>");
+	        eventHtml.push("                A value of 5 would indicate a heartbeat message should be sent every 5 minutes ");
 	        eventHtml.push("            </small>");
 	        eventHtml.push("        </div>");
 	        eventHtml.push("        <br/>");

@@ -35,7 +35,7 @@
 	    <input type="hidden" id="octoslack_timezone_hidden" data-bind="value: settings.plugins.Octoslack.timezone">
 	    <small class="muted">
                 <br/>
-                test
+                The time zone to be used when calculating the print ETA date & time
             </small>
 	</div>
 	<div class="octoprint_config_row">
@@ -55,11 +55,19 @@
             </small>
 	    <p class="octoslack_indented">
 	        <small class="muted">
-	    	    <strong>Human exact</strong> - "H hours, M minutes, S seconds"
+	    	    <strong>HH:mm &lt;fuzzy date&gt;</strong> - "18:45 today"
 	            <br/>
-	            <strong>Human fuzzy</strong> - "an hour"
+	            <strong>hh:mm tt &lt;fuzzy date&gt;</strong> - "06:45 PM today"
 	            <br/>
-	            <strong>Compact exact</strong> - "HH:MM:SS"
+	            <strong>yyyy-MM-dd HH:mm</strong> - "2018-10-31 18:45"
+	            <br/>
+	            <strong>MM/dd/yyyy HH:mm</strong> - "10/31/2018 18:45"
+	            <br/>
+	            <strong>dd/MM/yyyy HH:mm</strong> - "31/10/2018 18:45"
+	            <br/>
+	            <strong>MM/dd/yyyy hh:mm tt</strong> - "10/31/2018 06:45 PM"
+	            <br/>
+	            <strong>dd/MM/yyyy hh:mm tt</strong> - "31/10/2018 06:45 PM"
 	        </small>
 	    </p>
 	</div>
@@ -452,6 +460,8 @@
 			<strong>{ip_address}</strong> - Local OctoPrint server IP(s)
 			<br/>
 			<strong>{error}</strong> - For error/failed events, the error message (if available)
+			<br/>
+			<strong>{printer_status}</strong> - Printer status
 		</p>
 		<br/>
                 When <strong>Channel(s) override</strong> is left blank, enabled events will sent to the default Channel(s) configured above
@@ -484,6 +494,8 @@
 			<strong>{error}</strong> - For error/failed events, the error message (if available)
 			<br/>
 			<strong>{ip_address}</strong> - Local OctoPrint server IP(s)
+			<br/>
+			<strong>{printer_status}</strong> - Printer status
 			<br/>
 			<strong>{cmd}</strong> - The G-code to be executed (available for G-code detection events)
 		</p>

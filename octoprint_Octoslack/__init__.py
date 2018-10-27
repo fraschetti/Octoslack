@@ -307,6 +307,21 @@ class OctoslackPlugin(
                     "ReportJobProgress": True,
                     "ReportMovieStatus": False,
                 },
+                ##Not a real event but we'll leverage the same config structure
+                "Heartbeat": {
+                    "Enabled": False,
+                    "ChannelOverride": "",
+                    "Message": ":heavy_minus_sign: Heartbeat - Printer status: {printer_status} :heartbeat:",
+                    "Fallback": "Heartbeat - Printer status: {printer_status}",
+                    "Color": "good",
+                    "CaptureSnapshot": False,
+                    "ReportPrinterState": True,
+                    "ReportJobState": False,
+                    "ReportJobOrigEstimate": False,
+                    "ReportJobProgress": False,
+                    "ReportMovieStatus": False,
+                    "IntervalTime": 60,
+                },
                 "PrintPaused": {
                     "Enabled": True,
                     "ChannelOverride": "",
@@ -376,7 +391,7 @@ class OctoslackPlugin(
             "gcode_events": "",
             "timezones": "|".join(pytz.common_timezones),
             "timezone": "OS_Default",
-            "eta_date_format": "yyyy-MM-dd HH:mm",
+            "eta_date_format": "hh:mm tt <fuzzy date>",
         }
 
     def get_settings_restricted_paths(self):
@@ -404,9 +419,15 @@ class OctoslackPlugin(
         return 1
 
     def on_settings_save(self, data):
-        octoprint.plugin.SettingsPlugin.on_settings_save(self, data)
-        self.update_progress_timer()
-        self.update_gcode_listeners()
+        try:
+            octoprint.plugin.SettingsPlugin.on_settings_save(self, data)
+            self.update_progress_timer()
+            self.update_heartbeat_timer()
+            self.update_gcode_listeners()
+        except Exception as e:
+            self._logger.exception(
+                "Error executing post-save actions, Error: " + str(e.message)
+            )
 
     ##~ TemplatePlugin mixin
 
@@ -458,12 +479,17 @@ class OctoslackPlugin(
 
         self.update_gcode_listeners()
 
+        self.start_heartbeat_timer()
+
         ##~~ ShutdownPlugin mixin
 
     def on_shutdown(self):
         self.stop_rtm_client()
 
         self._logger.debug("Stopped Slack RTM client")
+
+        self.stop_progress_timer()
+        self.stop_heartbeat_timer()
 
         ##~~ PrintProgress mixin
 
@@ -502,13 +528,19 @@ class OctoslackPlugin(
 
     print_cancel_time = None
     progress_timer = None
+    heartbeat_timer = None
 
     def start_progress_timer(self):
-        progress_timer_interval = int(
-            self._settings.get(["supported_events"], merged=True)
-            .get("Progress")
-            .get("IntervalTime")
+        progress_event = self._settings.get(["supported_events"], merged=True).get(
+            "Progress"
         )
+
+        progress_enabled = progress_event.get("Enabled")
+        if not progress_enabled or progress_enabled == False:
+            return
+
+        progress_timer_interval = int(progress_event.get("IntervalTime"))
+
         if (
             progress_timer_interval > 0
             and (self._printer.is_printing() or self._printer.is_paused())
@@ -523,24 +555,38 @@ class OctoslackPlugin(
     def update_progress_timer(self):
         restart = False
 
-        new_interval = int(
-            self._settings.get(["supported_events"], merged=True)
-            .get("Progress")
-            .get("IntervalTime")
+        progress_event = self._settings.get(["supported_events"], merged=True).get(
+            "Progress"
         )
+
+        progress_enabled = progress_event.get("Enabled")
+        if not progress_enabled or progress_enabled == False:
+            self.stop_progress_timer()
+            return
+
+        new_interval = int(progress_event.get("IntervalTime"))
+
         if self.progress_timer == None and new_interval > 0:
             restart = True
         else:
             existing_interval = 0
             if not self.progress_timer == None:
                 existing_interval = self.progress_timer.interval
+                ##OctoPrint wraps the interval in a lambda function
+                if callable(existing_interval):
+                    existing_interval = existing_interval()
+                existing_interval = existing_interval / 60
+
+                self._logger.debug("New progress interval: " + str(new_interval))
+                self._logger.debug(
+                    "Previous progress interval: " + str(existing_interval)
+                )
 
             if new_interval != existing_interval:
                 restart = True
 
         if restart and new_interval > 0:
             self.stop_progress_timer()
-
             self.start_progress_timer()
 
     def stop_progress_timer(self):
@@ -548,6 +594,70 @@ class OctoslackPlugin(
             self._logger.debug("Stopping progress timer")
             self.progress_timer.cancel()
             self.progress_timer = None
+
+    def heartbeat_timer_tick(self):
+        self._logger.debug("Heartbeat timer tick")
+        self.handle_event("Heartbeat", None, {}, False, None)
+
+    def start_heartbeat_timer(self):
+        heartbeat_event = self._settings.get(["supported_events"], merged=True).get(
+            "Heartbeat"
+        )
+
+        heartbeat_enabled = heartbeat_event.get("Enabled")
+        if not heartbeat_enabled or heartbeat_enabled == False:
+            return
+
+        heartbeat_timer_interval = int(heartbeat_event.get("IntervalTime"))
+
+        self._logger.debug("Starting heartbeat timer")
+        self.heartbeat_timer = RepeatedTimer(
+            heartbeat_timer_interval * 60, self.heartbeat_timer_tick, run_first=False
+        )
+        self.heartbeat_timer.start()
+
+    def update_heartbeat_timer(self):
+        restart = False
+
+        heartbeat_event = self._settings.get(["supported_events"], merged=True).get(
+            "Heartbeat"
+        )
+
+        heartbeat_enabled = heartbeat_event.get("Enabled")
+        if not heartbeat_enabled or heartbeat_enabled == False:
+            self.stop_heartbeat_timer()
+            return
+
+        new_interval = int(heartbeat_event.get("IntervalTime"))
+
+        if self.heartbeat_timer == None and new_interval > 0:
+            restart = True
+        else:
+            existing_interval = 0
+            if not self.heartbeat_timer == None:
+                existing_interval = self.heartbeat_timer.interval
+                ##OctoPrint wraps the interval in a lambda function
+                if callable(existing_interval):
+                    existing_interval = existing_interval()
+                existing_interval = existing_interval / 60
+
+                self._logger.debug("New heartbeat interval: " + str(new_interval))
+                self._logger.debug(
+                    "Previous heartbeat interval: " + str(existing_interval)
+                )
+
+            if new_interval != existing_interval:
+                restart = True
+
+        if restart and new_interval > 0:
+            self.stop_heartbeat_timer()
+            self.start_heartbeat_timer()
+
+    def stop_heartbeat_timer(self):
+        if not self.heartbeat_timer == None:
+            self._logger.debug("Stopping heartbeat timer")
+            self.heartbeat_timer.cancel()
+            self.heartbeat_timer = None
 
     last_trigger_height = 0.0
 
@@ -718,6 +828,7 @@ class OctoslackPlugin(
             "{error}": "N/A",
             "{cmd}": "N/A",
             "{ip_address}": "N/A",
+            "{printer_status}": "N/A",
         }
 
         printer_data = self._printer.get_current_data()
@@ -736,6 +847,11 @@ class OctoslackPlugin(
             z_height_str = ", Nozzle Height: " + "{0:.2f}".format(z_height) + "mm"
 
         replacement_params["{current_z}"] = z_height_str
+
+        printer_text = printer_state["text"]
+        if not printer_text == None:
+            printer_text = printer_text.strip()
+        replacement_params["{printer_status}"] = printer_text
 
         self._logger.debug("Printer data: " + str(printer_data))
 
@@ -868,9 +984,6 @@ class OctoslackPlugin(
                             + "C"
                         )
 
-            printer_text = printer_state["text"]
-            if not printer_text == None:
-                printer_text = printer_text.strip()
             footer = "Printer: " + printer_text + temp_str + z_height_str
 
         if self._settings.get(["include_raspi_temp"], merged=True):
@@ -937,7 +1050,6 @@ class OctoslackPlugin(
 
         ips = self.get_ips()
         ips_str = ", ".join(ips)
-        self._logger.debug("IPs: " + ips_str)
         replacement_params["{ip_address}"] = ips_str
 
         if includeSupportedCommands:
@@ -1339,7 +1451,7 @@ class OctoslackPlugin(
     def format_eta(self, seconds):
         """For a given seconds to complete, returns an ETA string for humans.
         """
-        if seconds is None:
+        if seconds is None or seconds == "N/A":
             return "N/A"
 
         tz_config = self._settings.get(["timezone"], merged=True)
