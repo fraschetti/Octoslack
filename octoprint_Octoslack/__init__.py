@@ -287,8 +287,8 @@ class OctoslackPlugin(
                     "ReportJobProgress": True,
                     "ReportMovieStatus": False,
                     "UpdateMethod": "NEW_MESSAGE",
-                    # Minimum time in minutes to wait before uploading an image again for a progress upload
-                    "MinImageUpdateDelay": 10,
+                    # Minimum time in minutes to wait before uploading a snapshot again for a progress upload
+                    "SlackMinSnapshotUpdateInterval": 10,
                     "IntervalPct": 25,
                     "IntervalHeight": 0,
                     "IntervalTime": 0,
@@ -313,7 +313,7 @@ class OctoslackPlugin(
                     "ChannelOverride": "",
                     "Message": ":heavy_minus_sign: Heartbeat - Printer status: {printer_status} :heartbeat:",
                     "Fallback": "Heartbeat - Printer status: {printer_status}",
-                    "Color": "good",
+                    "Color": "good",  ##Color may be updated in process_slack_event
                     "CaptureSnapshot": False,
                     "ReportPrinterState": True,
                     "ReportJobState": False,
@@ -424,6 +424,7 @@ class OctoslackPlugin(
             self.update_progress_timer()
             self.update_heartbeat_timer()
             self.update_gcode_listeners()
+            self._slack_next_progress_snapshot_time = 0
         except Exception as e:
             self._logger.exception(
                 "Error executing post-save actions, Error: " + str(e.message)
@@ -472,10 +473,6 @@ class OctoslackPlugin(
         self._logger.debug("Starting Slack RTM client")
         self.start_rtm_client()
         self._logger.debug("Started Slack RTM client")
-
-        self._bot_progress_req = None
-        self._bot_progress_image = None
-        self._bot_image_next_post_time = 0
 
         self.update_gcode_listeners()
 
@@ -546,7 +543,9 @@ class OctoslackPlugin(
             and (self._printer.is_printing() or self._printer.is_paused())
             and not self._printer.is_ready()
         ):
-            self._logger.debug("Starting progress timer")
+            self._logger.debug(
+                "Starting progress timer: " + str(progress_timer_interval) + "min(s)"
+            )
             self.progress_timer = RepeatedTimer(
                 progress_timer_interval * 60, self.progress_timer_tick, run_first=False
             )
@@ -597,6 +596,7 @@ class OctoslackPlugin(
 
     def heartbeat_timer_tick(self):
         self._logger.debug("Heartbeat timer tick")
+        ##Color may be updated in process_slack_event
         self.handle_event("Heartbeat", None, {}, False, None)
 
     def start_heartbeat_timer(self):
@@ -609,12 +609,16 @@ class OctoslackPlugin(
             return
 
         heartbeat_timer_interval = int(heartbeat_event.get("IntervalTime"))
-
-        self._logger.debug("Starting heartbeat timer")
-        self.heartbeat_timer = RepeatedTimer(
-            heartbeat_timer_interval * 60, self.heartbeat_timer_tick, run_first=False
-        )
-        self.heartbeat_timer.start()
+        if heartbeat_timer_interval > 0:
+            self._logger.debug(
+                "Starting heartbeat timer: " + str(heartbeat_timer_interval) + "min(s)"
+            )
+            self.heartbeat_timer = RepeatedTimer(
+                heartbeat_timer_interval * 60,
+                self.heartbeat_timer_tick,
+                run_first=False,
+            )
+            self.heartbeat_timer.start()
 
     def update_heartbeat_timer(self):
         restart = False
@@ -708,8 +712,10 @@ class OctoslackPlugin(
             if event == "PrintCancelled":
                 self.stop_progress_timer()
                 self.print_cancel_time = time.time()
+                self._bot_progress_last_req = None
             elif event == "PrintFailed":
                 self.stop_progress_timer()
+                self._bot_progress_last_req = None
 
                 ignore_cancel_fail_event = self._settings.get(
                     ["ignore_cancel_fail_event"], merged=True
@@ -728,9 +734,13 @@ class OctoslackPlugin(
                 self.start_progress_timer()
                 self.print_cancel_time = None
                 self.last_trigger_height = 0.0
+                self._bot_progress_last_req = None
+                self._bot_progress_last_snapshot = None
+                self._slack_next_progress_snapshot_time = 0
             elif event == "PrintDone":
                 self.stop_progress_timer()
                 self.print_cancel_time = None
+                self._bot_progress_last_req = None
             elif event == "ZChange":
                 if self.process_zheight_change(payload):
                     self.handle_event("Progress", None, payload, False, None)
@@ -854,6 +864,10 @@ class OctoslackPlugin(
         replacement_params["{printer_status}"] = printer_text
 
         self._logger.debug("Printer data: " + str(printer_data))
+
+        ##Override Heartbeat event color if printer is in an error state
+        if event == "Heartbeat" and self._printer.is_closed_or_error():
+            color = "danger"
 
         if reportJobState:
             print_origin = job_state["file"]["origin"]
@@ -1131,6 +1145,7 @@ class OctoslackPlugin(
                 fields,
                 footer,
                 includeSnapshot,
+                replacement_params["{pct_complete}"],
             ),
         )
         t.start()
@@ -1562,6 +1577,7 @@ class OctoslackPlugin(
         fields,
         footer,
         includeSnapshot,
+        print_pct_complete,
     ):
 
         slackAPIToken = None
@@ -1573,10 +1589,10 @@ class OctoslackPlugin(
             .get("Progress")
             .get("UpdateMethod")
         )
-        progress_min_delay = 60 * int(
+        slack_progress_snapshot_min_interval = 60 * int(
             self._settings.get(["supported_events"], merged=True)
             .get("Progress")
-            .get("MinImageUpdateDelay")
+            .get("SlackMinSnapshotUpdateInterval")
         )
         self._logger.debug("Slack connection method: " + connection_method)
 
@@ -1632,20 +1648,31 @@ class OctoslackPlugin(
                     == "SLACK"
                 ):
                     if slackAPIToken:
-                        if (
-                            event == "Progress"
-                            and time.time() < self._bot_image_next_post_time
+                        now = time.time()
+
+                        if event == "Progress" and (
+                            self._slack_next_progress_snapshot_time > 0
+                            and now < self._slack_next_progress_snapshot_time
                         ):
                             snapshot_msg = None
                         else:
-                            self._bot_image_next_post_time = (
-                                time.time() + progress_min_delay
-                            )
+                            if event == "Progress":
+                                self._slack_next_progress_snapshot_time = (
+                                    now + slack_progress_snapshot_min_interval
+                                )
+
+                            desc = event + " snapshot"
+                            if (
+                                event == "Progress"
+                                and print_pct_complete
+                                and print_pct_complete != "N/A"
+                            ):
+                                desc = desc + " taken @ " + print_pct_complete
+
                             snapshot_msg = {
                                 "file_": hosted_url,
-                                "filename": "image.jpg",
-                                "title": "%s snapshot at %s"
-                                % (event, time.strftime("%X")),
+                                "filename": "snapshot.jpg",
+                                "title": desc,
                             }
                 else:
                     attachment["image_url"] = hosted_url
@@ -1733,12 +1760,12 @@ class OctoslackPlugin(
 
                     if event == "Progress":
                         if (
-                            self._bot_progress_req
+                            self._bot_progress_last_req
                             and progress_update_method == "INPLACE"
                         ):
                             apiRsp = slackAPIConnection.chat.update(
-                                self._bot_progress_req.body["channel"],
-                                ts=self._bot_progress_req.body["ts"],
+                                self._bot_progress_last_req.body["channel"],
+                                ts=self._bot_progress_last_req.body["ts"],
                                 text="",
                                 attachments=attachments_json,
                             )
@@ -1752,10 +1779,10 @@ class OctoslackPlugin(
                                 icon_url=slack_icon_url,
                                 icon_emoji=slack_icon_emoji,
                             )
-                            self._bot_progress_req = apiRsp
+                            self._bot_progress_last_req = apiRsp
                     else:
-                        self._bot_progress_req = None
-                        self._bot_progress_image = None
+                        self._bot_progress_last_req = None
+                        self._bot_progress_last_snapshot = None
                         apiRsp = slackAPIConnection.chat.post_message(
                             channel,
                             text="",
@@ -1772,17 +1799,21 @@ class OctoslackPlugin(
                         if snapshot_msg.get("file_"):
                             os.remove(snapshot_msg["file_"])
                         if event == "Progress":
-                            # bump out the delay again as an upload can take some time
-                            self._bot_image_next_post_time = (
-                                time.time() + progress_min_delay
+                            # bump out the 'next time' again as an upload can take some time
+                            _slack_next_progress_snapshot_time = (
+                                time.time() + slack_progress_snapshot_min_interval
                             )
-                            if self._bot_progress_image:
+                            if self._bot_progress_last_snapshot:
                                 try:
-                                    fid = self._bot_progress_image.body["file"]["id"]
+                                    fid = self._bot_progress_last_snapshot.body["file"][
+                                        "id"
+                                    ]
                                     slackAPIConnection.files.delete(fid)
                                 except Exception as e:
-                                    self._logger.error("Image key error: {}".format(e))
-                            self._bot_progress_image = resp
+                                    self._logger.error(
+                                        "Slack snapshot deletion error: {}".format(e)
+                                    )
+                            self._bot_progress_last_snapshot = resp
                 except Exception as e:
                     self._logger.exception("Slack API message send error: " + str(e))
             elif not slackWebHookUrl == None and len(slackWebHookUrl) > 0:

@@ -1,4 +1,4 @@
-/*
+ /*
  * View model for OctoPrint-Octoslack
  *
  * Author: Chris Fraschetti
@@ -91,8 +91,34 @@ var Octoslack = {
 		$('#octoslack_connection_type_apitoken').removeAttr('disabled');
 		$('#octoslack_connection_type_webhook').removeAttr('disabled');
 		$('#octoslack_custom_identity_icon_emoji').removeAttr('disabled');
-
 	}
+    },
+
+    applySlackUploadChanges : function() {
+        var upload_method = $("#octoslack_upload_method_hidden").val();
+
+        var showProgressUpdateMethod = false;
+        var showProgressImageUpdateInterval = false;
+
+        if(upload_method == "SLACK") {
+            showProgressUpdateMethod = true;
+            showProgressImageUpdateInterval = true;
+        }
+
+        var progress_update_method_div = $("#octoslack_progress_update_method");
+        var progress_image_update_interval_div = $("#octoslack_progress_image_update_interval");
+
+        if(showProgressUpdateMethod) {
+            progress_update_method_div.attr("class", "octoprint_config_row");
+        } else {
+            progress_update_method_div.attr("class", "octoslack_hidden");
+        }
+
+        if(showProgressImageUpdateInterval) {
+            progress_image_update_interval_div.attr("class", "octoprint_config_row");
+        } else {
+            progress_image_update_interval_div.attr("class", "octoslack_hidden");
+        }
     },
 
     populateTimezones : function() {
@@ -191,7 +217,7 @@ var Octoslack = {
                 break;
            case "WEBHOOK":
                  webhookGroup.attr("class", "octoslack_visible");
-                   break;
+                 break;
         }
 
         var connection_method_hidden = $("#octoslack_connection_method_hidden");
@@ -225,11 +251,15 @@ var Octoslack = {
             case "MINIO":
                 minioGroup.attr("class", "octoslack_visible");
                 break;
+            case "SLACK":
+                break;
         }
 
         var upload_method = $("#octoslack_upload_method_hidden");
         upload_method.val(selection.value);
         upload_method.trigger('change');
+
+        Octoslack.applySlackUploadChanges();
     },
 
     escapeHtml : function(html_text) {
@@ -437,32 +467,34 @@ var Octoslack = {
 
             if(eventType == "STANDARD" && internalName == "Progress") {
                 // Update method (inplace, or new messagse)
-            eventHtml.push("        <div class='octoprint_config_row'>");
+            eventHtml.push("        <div id='octoslack_progress_update_method' class='octoprint_config_row'>");
             eventHtml.push("            <select class='octoslack_select' id='octoslack_event_" + internalName + "_UpdateMethod' "
                  + (useDataBind ? "data-bind='value: settings.plugins.Octoslack.supported_events." + internalName + ".UpdateMethod'" : "")
-                 + ">");
-            eventHtml.push("<option value='INPLACE'>Inplace</option>");
+                 + " onchange='Octoslack.applySlackUploadChanges()'>");
+            eventHtml.push("<option value='INPLACE'>In-place</option>");
             eventHtml.push("<option value='NEW_MESSAGE'>New Message</option>");
             eventHtml.push("</select>");
             eventHtml.push("            <div class='octoslack_label octoslack_action_label'>Progress Update Method</div>");
             eventHtml.push("            <br/>");
             eventHtml.push("            <small class='muted'>");
-            eventHtml.push('                Only applicable for Slack API Token, if "Inplace" is selected, rather than sending a new message to update the progress, the existing message will be updated in place.');
+            eventHtml.push('                If "In-place" is selected, rather than sending a new message to update the progress, the existing message will be updated in place. Requires Slack API Token.');
             eventHtml.push("            </small>");
-            eventHtml.push("        </div>");
             eventHtml.push("        <br/>");
-             // Min image update delay
-            eventHtml.push("        <div class='octoprint_config_row'>");
-            eventHtml.push("            <input type='number' step='any' min='1' max='1440' class='input-mini text-right' id='octoslack_event_" + internalName + "_MinImageUpdateDelay' "
-                 + (useDataBind ? "data-bind='value: settings.plugins.Octoslack.supported_events." + internalName + ".MinImageUpdateDelay'" : "")
+            eventHtml.push("        </div>");
+             // Min image update interval
+            eventHtml.push("        <div id='octoslack_progress_image_update_interval' class='octoprint_config_row'>");
+            eventHtml.push("            <input type='number' step='any' min='0' max='1440' class='input-mini text-right' id='octoslack_event_" + internalName + "_SlackMinSnapshotUpdateInterval' "
+                 + (useDataBind ? "data-bind='value: settings.plugins.Octoslack.supported_events." + internalName + ".SlackMinSnapshotUpdateInterval'" : "")
                  + ">");
-            eventHtml.push("            <div class='octoslack_label octoslack_action_label'>Minimum Image Delay</div>");
+            eventHtml.push("            <div class='octoslack_label octoslack_action_label'>Snapshot Upload Minimum Interval</div>");
+            eventHtml.push("            <br/>");
             eventHtml.push("            <br/>");
             eventHtml.push("            <small class='muted'>");
-            eventHtml.push("                The minumum amount of time (in minutes) that must pass before the next progress image is uploaded. This prevents hitting the Slack API too hard.");
+            eventHtml.push("                For Slack snapshot uploads, the minumum amount of time (in minutes) that must pass before the next progress snapshot is uploaded. Requires Slack API Token. 0 = disabled (always send snapshots)");
             eventHtml.push("            </small>");
-            eventHtml.push("        </div>");
             eventHtml.push("        <br/>");
+            eventHtml.push("        </div>");
+            eventHtml.push("        <div class='octoprint_config_row'>");
                 //IntervalPct
 	        eventHtml.push("        <div class='octoprint_config_row'>");
 	        eventHtml.push("            <input type='number' step='any' min='0' max='99' class='input-mini text-right' id='octoslack_event_" + internalName + "_InvervalPct' "
@@ -513,7 +545,7 @@ var Octoslack = {
             if(eventType == "STANDARD" && internalName == "Heartbeat") {
                 //IntervalTime
 	        eventHtml.push("        <div class='octoprint_config_row'>");
-	        eventHtml.push("            <input type='number' step='any' min='0' class='input-mini text-right' id='octoslack_event_" + internalName + "_IntervalTime' "
+	        eventHtml.push("            <input type='number' step='any' min='1' class='input-mini text-right' id='octoslack_event_" + internalName + "_IntervalTime' "
                     + (useDataBind ? "data-bind='value: settings.plugins.Octoslack.supported_events." + internalName + ".IntervalTime'" : "")
                     + ">");
 	        eventHtml.push("            <div class='octoslack_label octoslack_action_label'>Interval - Time (minutes)</div>");

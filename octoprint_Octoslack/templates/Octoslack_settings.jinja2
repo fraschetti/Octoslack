@@ -226,7 +226,7 @@
             <input type="radio" name="octoslackSnapshotUploadMethod" id="octoslackSnapshotUploadMethod_none"  onclick="Octoslack.changeSnapshotUploadMethod(this);" class="octoslack_valign" value="NONE">
             <span class="octoslack_valign octoslack_action_label" onclick="$('#octoslackSnapshotUploadMethod_none').trigger('click')">None</span>
 	    <br/>
-	    <small class="muted">Unfortunately cleanly attaching images to Slack messages requires an external hosting service. If no this option is specified, snapshots will be unavailable</small>
+	    <small class="muted">No snapshots will be uploaded</small>
         </div>
         <div>
             <input type="radio" name="octoslackSnapshotUploadMethod" id="octoslackSnapshotUploadMethod_imgur" onclick="Octoslack.changeSnapshotUploadMethod(this);" class="octoslack_valign" value="IMGUR">
@@ -246,7 +246,7 @@
 	    <br/>
 	    <small class="muted">Leverage Minio S3 compatible self hostable storage (see <a href="https://minio.io" target="_blank">Minio.io</a>)</small>
         </div>
-        <div>
+        <div id="octoslackSlackUploadMethod">
             <input type="radio" name="octoslackSnapshotUploadMethod"
             id="octoslackSnapshotUploadMethod_slack"
             onclick="Octoslack.changeSnapshotUploadMethod(this);"
@@ -254,8 +254,7 @@
             <span class="octoslack_valign octoslack_action_label"
               onclick="$('#octoslackSnapshotUploadMethod_slack').trigger('click')">Slack</span>
            <br/>
-           <small class="muted">This will post directly to Slack. The display is not as
-          clean, but saves having to use an extra service</small>
+           <small class="muted">Snapshot images will be uploaded directly to Slack as general attachments. It's highly recommended to only use this option when sending messages to a dedicated Slack channel. Snapshots uploaded to Slack directly are not connected to Slack messages and depending on channel activity, may not render immediately after the intended Slack message. It's also worth noting that even with a dedicated channel, if multiple Slack messages are generated within a short period, the aforementioned render location issue may also occur. Requires Slack API Token.</small>
         </div>
         <div id="octoslack_imgur_group" class="octoslack_hidden">
             <br/>
@@ -299,7 +298,7 @@
                 <input type="text" id="octoslack_imgur_album_id" class="octoslack_width_auto" size="20" data-bind="value: settings.plugins.Octoslack.imgur_config.album_id">
             </div>
 	    <small class="muted">
-                Optional. If left blank, images will be uploaded into the 'Anomyous' Imgur album which means your uploads will not be associated with any of your albums.
+                Optional. If left blank, snapshots will be uploaded into the 'Anonymous' Imgur album which means your uploads will not be associated with any of your albums.
                 <br/>
                 The Imgur Album ID can be extracted via the URL you see when viewing your album.
                 <br/>
