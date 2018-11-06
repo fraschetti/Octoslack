@@ -577,6 +577,35 @@ var Octoslack = {
 	    eventHtml.push("            <div class='octoslack_label octoslack_action_label' onclick=\"$('#octoslack_event_" + internalName + "_snapshot').trigger('click')\">Include snapshot</div>");
 	    eventHtml.push("        </div>");
 
+            if(eventType == "STANDARD" && internalName == "MovieDone") {
+                //UploadMovie
+	        eventHtml.push("        <div class='octoprint_config_row'>");
+	        eventHtml.push("            <input type='checkbox' class='octoslack_valign' id='octoslack_event_" + internalName + "_uploadmovie' "
+                    + (useDataBind ? "data-bind='checked: settings.plugins.Octoslack.supported_events." + internalName + ".UploadMovie'" : "")
+                    + ">");
+	        eventHtml.push("            <div class='octoslack_label octoslack_action_label' onclick=\"$('#octoslack_event_" + internalName + "_uploadmovie').trigger('click')\">Upload timelapse</div>");
+	        eventHtml.push("            <br/>")
+	        eventHtml.push("            <small class='muted'>");
+	        eventHtml.push("                Upload rendered timelapse movie via the configured Snapshot Hosting option. Enabling this option will delay publishing of this event to Slack until after the timelapse has been uploaded.");
+	        eventHtml.push("            <br/>")
+	        eventHtml.push("                NOTE: Imgur does not yet support video uploads across all platforms. See <a href='https://blog.imgur.com/2018/05/29/upload-video-with-sound-on-imgur-for-ios/' target='_blank'>here</a>");
+	        eventHtml.push("            </small>");
+	        eventHtml.push("        </div>");
+
+                //UploadedMovieLink
+	        eventHtml.push("        <div class='octoprint_config_row'>");
+	        eventHtml.push("            <input type='checkbox' class='octoslack_valign' id='octoslack_event_" + internalName + "_uploadmovielink' "
+                    + (useDataBind ? "data-bind='checked: settings.plugins.Octoslack.supported_events." + internalName + ".UploadMovieLink'" : "")
+                    + ">");
+	        eventHtml.push("            <div class='octoslack_label octoslack_action_label' onclick=\"$('#octoslack_event_" + internalName + "_uploadmovielink').trigger('click')\">Include uploaded timelapse URL</div>");
+	        eventHtml.push("            <br/>")
+	        eventHtml.push("            <br/>")
+	        eventHtml.push("            <small class='muted'>");
+	        eventHtml.push("                If a timelapse movie has been uploaded, include its download link in the event message");
+	        eventHtml.push("            </small>");
+	        eventHtml.push("        </div>");
+            }
+
             //Message
 	    eventHtml.push("        <div class='octoprint_config_row'>");
 	    eventHtml.push("            <textarea class='octoslack_width_auto' rows='2' cols='60' id='octoslack_event_" + internalName + "_message' "

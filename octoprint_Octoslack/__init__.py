@@ -55,6 +55,7 @@ class OctoslackPlugin(
     ##TODO ENHANCEMENT - Remove the need to restart OctoPrint when switching between the Slack API and WebHook
     ##TODO FEATURE - Define a third set of messages for each event to allow sending M117 commands to the printer
     ##TODO ENHANCEMENT - The progress event fires on gcode uploads and triggers Octoslack events. That needs to be fixed.
+    ##TODO ENHANCEMENT - Consider extending the progress snapshot minimum interval beyond Slack to other providers
 
     ##~~ SettingsPlugin mixin
 
@@ -373,6 +374,8 @@ class OctoslackPlugin(
                     "ReportJobOrigEstimate": False,
                     "ReportJobProgress": False,
                     "ReportMovieStatus": True,
+                    "UploadMovie": False,
+                    "UploadMovieLink": False,
                 },
                 "MovieFailed": {
                     "Enabled": False,
@@ -1136,6 +1139,7 @@ class OctoslackPlugin(
             target=self.send_slack_message,
             args=(
                 event,
+                event_payload,
                 channel_override,
                 fallback,
                 pretext,
@@ -1568,6 +1572,7 @@ class OctoslackPlugin(
     def send_slack_message(
         self,
         event,
+        event_payload,
         channel_override,
         fallback,
         pretext,
@@ -1579,197 +1584,265 @@ class OctoslackPlugin(
         includeSnapshot,
         print_pct_complete,
     ):
+        try:
+            slackAPIToken = None
+            slackWebHookUrl = None
 
-        slackAPIToken = None
-        slackWebHookUrl = None
+            connection_method = self._settings.get(["connection_method"], merged=True)
+            progress_update_method = (
+                self._settings.get(["supported_events"], merged=True)
+                .get("Progress")
+                .get("UpdateMethod")
+            )
+            slack_progress_snapshot_min_interval = 60 * int(
+                self._settings.get(["supported_events"], merged=True)
+                .get("Progress")
+                .get("SlackMinSnapshotUpdateInterval")
+            )
+            self._logger.debug("Slack connection method: " + connection_method)
 
-        connection_method = self._settings.get(["connection_method"], merged=True)
-        progress_update_method = (
-            self._settings.get(["supported_events"], merged=True)
-            .get("Progress")
-            .get("UpdateMethod")
-        )
-        slack_progress_snapshot_min_interval = 60 * int(
-            self._settings.get(["supported_events"], merged=True)
-            .get("Progress")
-            .get("SlackMinSnapshotUpdateInterval")
-        )
-        self._logger.debug("Slack connection method: " + connection_method)
+            if connection_method == "APITOKEN":
+                slackAPIToken = self._settings.get(
+                    ["slack_apitoken_config"], merged=True
+                ).get("api_token")
+                if not slackAPIToken == None:
+                    slackAPIToken = slackAPIToken.strip()
+            elif connection_method == "WEBHOOK":
+                slackWebHookUrl = self._settings.get(
+                    ["slack_webhook_config"], merged=True
+                ).get("webhook_url")
+                if not slackWebHookUrl == None:
+                    slackWebHookUrl = slackWebHookUrl.strip()
 
-        if connection_method == "APITOKEN":
-            slackAPIToken = self._settings.get(
-                ["slack_apitoken_config"], merged=True
-            ).get("api_token")
-            if not slackAPIToken == None:
-                slackAPIToken = slackAPIToken.strip()
-        elif connection_method == "WEBHOOK":
-            slackWebHookUrl = self._settings.get(
-                ["slack_webhook_config"], merged=True
-            ).get("webhook_url")
-            if not slackWebHookUrl == None:
-                slackWebHookUrl = slackWebHookUrl.strip()
+            if (slackAPIToken == None or len(slackAPIToken) == 0) and (
+                slackWebHookUrl == None or len(slackWebHookUrl) == 0
+            ):
+                self._logger.error(
+                    "Slack connection not available, skipping message send"
+                )
+                return
 
-        if (slackAPIToken == None or len(slackAPIToken) == 0) and (
-            slackWebHookUrl == None or len(slackWebHookUrl) == 0
-        ):
-            self._logger.error("Slack connection not available, skipping message send")
-            return
+            attachments = [{}]
+            attachment = attachments[0]
 
-        attachments = [{}]
-        attachment = attachments[0]
+            attachment["mrkdwn_in"] = ["text", "pretext"]
 
-        attachment["mrkdwn_in"] = ["text", "pretext"]
+            snapshot_url_to_append = None
+            snapshot_msg = None
 
-        snapshot_url_to_append = None
-        snapshot_msg = None
+            if includeSnapshot:
+                hosted_url, error_msgs, slack_rsp = self.upload_snapshot()
 
-        if includeSnapshot:
-            hosted_url, snapshot_errors = self.upload_snapshot()
+                if error_msgs:
+                    if text == None:
+                        text = ""
+                    elif len(text) > 0:
+                        text += "\n"
 
-            if snapshot_errors:
+                    text += self.bold_text() + "Snapshot error(s):" + self.bold_text()
+                    if self.mattermost_mode():
+                        text += "\n* " + "\n* ".join(error_msgs)
+                    else:
+                        text += "\n"
+
+                        for error_msg in error_msgs:
+                            text += "\n *-* "
+                            text += error_msg
+
+                if hosted_url:
+                    if (
+                        self._settings.get(["snapshot_upload_method"], merged=True)
+                        == "SLACK"
+                    ):
+                        if slackAPIToken:
+                            now = time.time()
+
+                            if event == "Progress" and (
+                                self._slack_next_progress_snapshot_time > 0
+                                and now < self._slack_next_progress_snapshot_time
+                            ):
+                                snapshot_msg = None
+                            else:
+                                if event == "Progress":
+                                    self._slack_next_progress_snapshot_time = (
+                                        now + slack_progress_snapshot_min_interval
+                                    )
+
+                                desc = event + " snapshot"
+                                if (
+                                    event == "Progress"
+                                    and print_pct_complete
+                                    and print_pct_complete != "N/A"
+                                ):
+                                    desc = desc + " taken @ " + print_pct_complete
+
+                                snapshot_msg = {
+                                    "local_file": hosted_url,
+                                    "filename": "snapshot.jpg",
+                                    "description": desc,
+                                }
+                    else:
+                        attachment["image_url"] = hosted_url
+                        if self.mattermost_mode():
+                            snapshot_url_to_append = hosted_url
+
+            if self.mattermost_mode() and not footer == None and len(footer) > 0:
                 if text == None:
                     text = ""
                 elif len(text) > 0:
                     text += "\n"
 
-                text += self.bold_text() + "Snapshot error(s):" + self.bold_text()
-                if self.mattermost_mode():
-                    text += "\n* " + "\n* ".join(snapshot_errors)
-                else:
+                text += "`" + footer + "`"
+                footer = None
+            elif not footer == None and len(footer) > 0:
+                attachment["footer"] = footer
+
+            if not snapshot_url_to_append == None:
+                if text == None:
+                    text = ""
+                elif len(text) > 0:
                     text += "\n"
 
-                    for snapshot_error in snapshot_errors:
-                        text += "\n *-* "
-                        text += snapshot_error
+                text += hosted_url
 
-            if hosted_url:
-                if (
-                    self._settings.get(["snapshot_upload_method"], merged=True)
-                    == "SLACK"
-                ):
-                    if slackAPIToken:
-                        now = time.time()
+            if not fields == None:
+                attachment["fields"] = fields
 
-                        if event == "Progress" and (
-                            self._slack_next_progress_snapshot_time > 0
-                            and now < self._slack_next_progress_snapshot_time
-                        ):
-                            snapshot_msg = None
+            if not fallback == None and len(fallback) > 0:
+                attachment["fallback"] = fallback
+
+            if not pretext == None and len(pretext) > 0:
+                if self.mattermost_mode():
+                    pretext = "##### " + pretext + " #####"
+                attachment["pretext"] = pretext
+
+            if not title == None and len(title) > 0:
+                attachment["title"] = title
+
+            if not color == None and len(color) > 0:
+                attachment["color"] = color
+
+            channels = channel_override
+            if channels == None or len(channels.strip()) == 0:
+                channels = self._settings.get(["channel"], merged=True)
+            if not channels:
+                channels = ""
+
+            if event == "MovieDone":
+                upload_timelapse = (
+                    self._settings.get(["supported_events"], merged=True)
+                    .get("MovieDone")
+                    .get("UploadMovie")
+                )
+
+                if upload_timelapse == True:
+                    timelapse_url, timelapse_errors = self.upload_timelapse_movie(
+                        event_payload["movie"], channels
+                    )
+                    upload_timelapse_link = (
+                        self._settings.get(["supported_events"], merged=True)
+                        .get("MovieDone")
+                        .get("UploadMovieLink")
+                    )
+
+                    if timelapse_url and upload_timelapse_link:
+                        if text == None:
+                            text = ""
+                        elif len(text) > 0:
+                            text += "\n"
+                        text += (
+                            self.bold_text()
+                            + "Timelapse: "
+                            + self.bold_text()
+                            + timelapse_url
+                        )
+
+                    if timelapse_errors:
+                        if text == None:
+                            text = ""
+                        elif len(text) > 0:
+                            text += "\n"
+
+                        text += (
+                            self.bold_text() + "Timelapse error(s):" + self.bold_text()
+                        )
+                        if self.mattermost_mode():
+                            text += "\n* " + "\n* ".join(timelapse_errors)
                         else:
-                            if event == "Progress":
-                                self._slack_next_progress_snapshot_time = (
-                                    now + slack_progress_snapshot_min_interval
-                                )
+                            text += "\n"
 
-                            desc = event + " snapshot"
+                            for timelapse_error in timelapse_errors:
+                                text += "\n *-* "
+                                text += timelapse_error
+
+            if not text == None and len(text) > 0:
+                attachment["text"] = text
+
+            ##Generate message JSON
+            attachments_json = json.dumps(attachments)
+
+            self._logger.debug(
+                "Slack postMessage - Channels: "
+                + channels
+                + ", JSON: "
+                + attachments_json
+            )
+
+            slack_identity_config = self._settings.get(["slack_identity"], merged=True)
+            slack_as_user = slack_identity_config["existing_user"]
+            slack_icon_url = ""
+            slack_icon_emoji = ""
+            slack_username = ""
+
+            if not slack_as_user:
+                if "icon_url" in slack_identity_config:
+                    slack_icon_url = slack_identity_config["icon_url"]
+                if not self.mattermost_mode() and "icon_emoji" in slack_identity_config:
+                    slack_icon_emoji = slack_identity_config["icon_emoji"]
+                if "username" in slack_identity_config:
+                    slack_username = slack_identity_config["username"]
+
+            allow_empty_channel = connection_method == "WEBHOOK"
+
+            for channel in channels.split(","):
+                channel = channel.strip()
+
+                if len(channel) == 0 and not allow_empty_channel:
+                    continue
+
+                allow_empty_channel = False
+
+                if slackAPIToken:
+                    try:
+                        slackAPIConnection = Slacker(
+                            slackAPIToken, timeout=SLACKER_TIMEOUT
+                        )
+
+                        if event == "Progress":
                             if (
-                                event == "Progress"
-                                and print_pct_complete
-                                and print_pct_complete != "N/A"
+                                self._bot_progress_last_req
+                                and progress_update_method == "INPLACE"
                             ):
-                                desc = desc + " taken @ " + print_pct_complete
-
-                            snapshot_msg = {
-                                "file_": hosted_url,
-                                "filename": "snapshot.jpg",
-                                "title": desc,
-                            }
-                else:
-                    attachment["image_url"] = hosted_url
-                    if self.mattermost_mode():
-                        snapshot_url_to_append = hosted_url
-
-        if self.mattermost_mode() and not footer == None and len(footer) > 0:
-            if text == None:
-                text = ""
-            elif len(text) > 0:
-                text += "\n"
-
-            text += "`" + footer + "`"
-            footer = None
-        elif not footer == None and len(footer) > 0:
-            attachment["footer"] = footer
-
-        if not snapshot_url_to_append == None:
-            if text == None:
-                text = ""
-            elif len(text) > 0:
-                text += "\n"
-
-            text += hosted_url
-
-        if not fields == None:
-            attachment["fields"] = fields
-
-        if not fallback == None and len(fallback) > 0:
-            attachment["fallback"] = fallback
-
-        if not pretext == None and len(pretext) > 0:
-            if self.mattermost_mode():
-                pretext = "##### " + pretext + " #####"
-            attachment["pretext"] = pretext
-
-        if not title == None and len(title) > 0:
-            attachment["title"] = title
-
-        if not color == None and len(color) > 0:
-            attachment["color"] = color
-
-        if not text == None and len(text) > 0:
-            attachment["text"] = text
-
-        attachments_json = json.dumps(attachments)
-
-        channels = channel_override
-        if channels == None or len(channels.strip()) == 0:
-            channels = self._settings.get(["channel"], merged=True)
-        if not channels:
-            channels = ""
-
-        self._logger.debug(
-            "Slack postMessage - Channels: " + channels + ", JSON: " + attachments_json
-        )
-
-        slack_identity_config = self._settings.get(["slack_identity"], merged=True)
-        slack_as_user = slack_identity_config["existing_user"]
-        slack_icon_url = ""
-        slack_icon_emoji = ""
-        slack_username = ""
-
-        if not slack_as_user:
-            if "icon_url" in slack_identity_config:
-                slack_icon_url = slack_identity_config["icon_url"]
-            if not self.mattermost_mode() and "icon_emoji" in slack_identity_config:
-                slack_icon_emoji = slack_identity_config["icon_emoji"]
-            if "username" in slack_identity_config:
-                slack_username = slack_identity_config["username"]
-
-        allow_empty_channel = connection_method == "WEBHOOK"
-
-        for channel in channels.split(","):
-            channel = channel.strip()
-
-            if len(channel) == 0 and not allow_empty_channel:
-                continue
-
-            allow_empty_channel = False
-
-            if slackAPIToken:
-                try:
-                    slackAPIConnection = Slacker(slackAPIToken, timeout=SLACKER_TIMEOUT)
-
-                    if event == "Progress":
-                        if (
-                            self._bot_progress_last_req
-                            and progress_update_method == "INPLACE"
-                        ):
-                            apiRsp = slackAPIConnection.chat.update(
-                                self._bot_progress_last_req.body["channel"],
-                                ts=self._bot_progress_last_req.body["ts"],
-                                text="",
-                                attachments=attachments_json,
-                            )
+                                apiRsp = slackAPIConnection.chat.update(
+                                    self._bot_progress_last_req.body["channel"],
+                                    ts=self._bot_progress_last_req.body["ts"],
+                                    text="",
+                                    attachments=attachments_json,
+                                )
+                            else:
+                                apiRsp = slackAPIConnection.chat.post_message(
+                                    channel,
+                                    text="",
+                                    username=slack_username,
+                                    as_user=slack_as_user,
+                                    attachments=attachments_json,
+                                    icon_url=slack_icon_url,
+                                    icon_emoji=slack_icon_emoji,
+                                )
+                                self._bot_progress_last_req = apiRsp
                         else:
+                            self._bot_progress_last_req = None
+                            self._bot_progress_last_snapshot = None
                             apiRsp = slackAPIConnection.chat.post_message(
                                 channel,
                                 text="",
@@ -1779,76 +1852,82 @@ class OctoslackPlugin(
                                 icon_url=slack_icon_url,
                                 icon_emoji=slack_icon_emoji,
                             )
-                            self._bot_progress_last_req = apiRsp
-                    else:
-                        self._bot_progress_last_req = None
-                        self._bot_progress_last_snapshot = None
-                        apiRsp = slackAPIConnection.chat.post_message(
-                            channel,
-                            text="",
-                            username=slack_username,
-                            as_user=slack_as_user,
-                            attachments=attachments_json,
-                            icon_url=slack_icon_url,
-                            icon_emoji=slack_icon_emoji,
+                        self._logger.debug(
+                            "Slack API message send response: " + apiRsp.raw
                         )
-                    self._logger.debug("Slack API message send response: " + apiRsp.raw)
-                    if snapshot_msg:
-                        snapshot_msg["channels"] = channel
-                        resp = slackAPIConnection.files.upload(**snapshot_msg)
-                        if snapshot_msg.get("file_"):
-                            os.remove(snapshot_msg["file_"])
-                        if event == "Progress":
-                            # bump out the 'next time' again as an upload can take some time
-                            _slack_next_progress_snapshot_time = (
-                                time.time() + slack_progress_snapshot_min_interval
+                        if snapshot_msg:
+                            ##TODO Doing the upload here makes it difficult to append any error messages to the slack message.
+                            ##consider doing the upload first
+                            hosted_url, error_msgs, slack_resp = self.upload_slack_asset(
+                                snapshot_msg["local_file"],
+                                snapshot_msg["filename"],
+                                snapshot_msg["description"],
+                                channel,
+                                None,
                             )
-                            if self._bot_progress_last_snapshot:
-                                try:
-                                    fid = self._bot_progress_last_snapshot.body["file"][
-                                        "id"
-                                    ]
-                                    slackAPIConnection.files.delete(fid)
-                                except Exception as e:
-                                    self._logger.error(
-                                        "Slack snapshot deletion error: {}".format(e)
-                                    )
-                            self._bot_progress_last_snapshot = resp
-                except Exception as e:
-                    self._logger.exception("Slack API message send error: " + str(e))
-            elif not slackWebHookUrl == None and len(slackWebHookUrl) > 0:
-                slack_msg = {}
-                slack_msg["channel"] = channel
 
-                if not slack_as_user == None:
-                    slack_msg["as_user"] = slack_as_user
-                if not slack_icon_url == None and len(slack_icon_url) > 0:
-                    slack_msg["icon_url"] = slack_icon_url
-                if not slack_icon_emoji == None and len(slack_icon_emoji) > 0:
-                    slack_msg["icon_emoji"] = slack_icon_emoji
-                if not slack_username == None and len(slack_username) > 0:
-                    slack_msg["username"] = slack_username
-
-                slack_msg["attachments"] = attachments
-                self._logger.debug(
-                    "Slack WebHook postMessage json: " + json.dumps(slack_msg)
-                )
-
-                try:
-                    webHook = IncomingWebhook(slackWebHookUrl)
-                    webHookRsp = webHook.post(slack_msg)
-                    self._logger.debug(
-                        "Slack WebHook postMessage response: " + webHookRsp.text
-                    )
-
-                    if not webHookRsp.ok:
-                        self._logger.error(
-                            "Slack WebHook message send failed: " + webHookRsp.text
+                            if snapshot_msg.get("file_"):
+                                os.remove(snapshot_msg["file_"])
+                            if event == "Progress":
+                                # bump out the 'next time' again as an upload can take some time
+                                _slack_next_progress_snapshot_time = (
+                                    time.time() + slack_progress_snapshot_min_interval
+                                )
+                                if (
+                                    progress_update_method == "INPLACE"
+                                    and self._bot_progress_last_snapshot
+                                ):
+                                    try:
+                                        fid = self._bot_progress_last_snapshot.body[
+                                            "file"
+                                        ]["id"]
+                                        slackAPIConnection.files.delete(fid)
+                                    except Exception as e:
+                                        self._logger.error(
+                                            "Slack snapshot deletion error: {}".format(
+                                                e
+                                            )
+                                        )
+                                self._bot_progress_last_snapshot = slack_resp
+                    except Exception as e:
+                        self._logger.exception(
+                            "Slack API message send error: " + str(e)
                         )
-                except Exception as e:
-                    self._logger.exception(
-                        "Slack WebHook message send error: " + str(e)
+                elif not slackWebHookUrl == None and len(slackWebHookUrl) > 0:
+                    slack_msg = {}
+                    slack_msg["channel"] = channel
+
+                    if not slack_as_user == None:
+                        slack_msg["as_user"] = slack_as_user
+                    if not slack_icon_url == None and len(slack_icon_url) > 0:
+                        slack_msg["icon_url"] = slack_icon_url
+                    if not slack_icon_emoji == None and len(slack_icon_emoji) > 0:
+                        slack_msg["icon_emoji"] = slack_icon_emoji
+                    if not slack_username == None and len(slack_username) > 0:
+                        slack_msg["username"] = slack_username
+
+                    slack_msg["attachments"] = attachments
+                    self._logger.debug(
+                        "Slack WebHook postMessage json: " + json.dumps(slack_msg)
                     )
+
+                    try:
+                        webHook = IncomingWebhook(slackWebHookUrl)
+                        webHookRsp = webHook.post(slack_msg)
+                        self._logger.debug(
+                            "Slack WebHook postMessage response: " + webHookRsp.text
+                        )
+
+                        if not webHookRsp.ok:
+                            self._logger.error(
+                                "Slack WebHook message send failed: " + webHookRsp.text
+                            )
+                    except Exception as e:
+                        self._logger.exception(
+                            "Slack WebHook message send error: " + str(e)
+                        )
+        except Exception as e:
+            self._logger.exception("Send Slack message error: " + str(e))
 
     tmp_imgur_client = None
 
@@ -1857,19 +1936,79 @@ class OctoslackPlugin(
             ["snapshot_upload_method"], merged=True
         )
         if snapshot_upload_method == None or snapshot_upload_method == "NONE":
-            return None, None
+            return None, None, None
 
-        local_file_path, snapshot_errors = self.retrieve_snapshot_images()
+        local_file_path, error_msgs = self.retrieve_snapshot_images()
 
-        if snapshot_errors == None:
-            snapshot_errors = []
+        dest_filename = "Snapshot_" + str(uuid.uuid1()).replace("-", "") + ".png"
+
+        if snapshot_upload_method == "SLACK":
+            # Return the file object, later logic will actually upload the asset
+            return local_file_path, None, None
+
+        return self.upload_asset(local_file_path, dest_filename, None, error_msgs)
+
+    def upload_timelapse_movie(self, local_file_path, channels):
+        try:
+            snapshot_upload_method = self._settings.get(
+                ["snapshot_upload_method"], merged=True
+            )
+            if snapshot_upload_method == None or snapshot_upload_method == "NONE":
+                return None, None
+
+            error_msgs = []
+
+            if snapshot_upload_method == "IMGUR":
+                # Imgur does not currently support video uploads
+                self._logger.exception(
+                    "Timelapse upload error: Imgur does not currently support video uploads"
+                )
+                error_msgs.append("Imgur does not currently support video uploads")
+                return None, error_msgs
+
+            wait_start = time.time()
+            while not os.path.exists(local_file_path):
+                if time.time() - wait_start > 15:
+                    self._logger.exception(
+                        "Timelapse upload error: Unable to locate timelapse on disk"
+                    )
+                    error_msgs.append("Unable to locate timelapse on disk")
+                    return None, error_msgs
+
+                time.sleep(5)
+
+            file_path, file_name = os.path.split(local_file_path)
+            dest_filename = file_name
+
+            url, error_msgs, slack_rsp = self.upload_asset(
+                local_file_path, dest_filename, channels, error_msgs
+            )
+
+            self._logger.debug(
+                "Upload timelapse ret: URL: "
+                + str(url)
+                + ", ErrorMsgs: "
+                + str(error_msgs)
+            )
+            return url, error_msgs
+        except Exception as e:
+            self._logger.exception("Snapshot upload error: " + str(e))
+            error_msgs.append(str(e))
+            return None, error_msgs
+
+    ##Channels is only required/used for Slack uploads
+    def upload_asset(self, local_file_path, dest_filename, channels, error_msgs):
+        snapshot_upload_method = self._settings.get(
+            ["snapshot_upload_method"], merged=True
+        )
+        if snapshot_upload_method == None or snapshot_upload_method == "NONE":
+            return None, None, None
+
+        if error_msgs == None:
+            error_msgs = []
 
         if local_file_path:
-            keep_local_file = False
             try:
-                snapshot_upload_method = self._settings.get(
-                    ["snapshot_upload_method"], merged=True
-                )
                 if snapshot_upload_method == "S3":
                     try:
                         self._logger.debug("Uploading snapshot via S3")
@@ -1887,9 +2026,7 @@ class OctoslackPlugin(
 
                         imgData = open(local_file_path, "rb")
 
-                        uploadFilename = (
-                            "Snapshot_" + str(uuid.uuid1()).replace("-", "") + ".png"
-                        )
+                        uploadFilename = dest_filename
 
                         s3conn = tinys3.Connection(awsAccessKey, awsSecretKey, tls=True)
                         s3UploadRsp = s3conn.upload(
@@ -1903,7 +2040,7 @@ class OctoslackPlugin(
                         self._logger.debug("S3 upload response: " + str(s3UploadRsp))
                         s3_upload_elapsed = time.time() - s3_upload_start
                         self._logger.debug(
-                            "Uploaded snapshot to S3 in "
+                            "Uploaded asset to S3 in "
                             + str(round(s3_upload_elapsed, 2))
                             + " seconds"
                         )
@@ -1913,16 +2050,17 @@ class OctoslackPlugin(
                             + s3Bucket
                             + "/"
                             + uploadFilename,
-                            snapshot_errors,
+                            error_msgs,
+                            None,
                         )
                     except Exception as e:
                         self._logger.exception(
-                            "Failed to upload snapshot to S3: " + str(e)
+                            "Failed to upload asset to S3: " + str(e)
                         )
-                        snapshot_errors.append("S3 error: " + str(e))
+                        error_msgs.append("S3 error: " + str(e))
                 elif snapshot_upload_method == "MINIO":
                     try:
-                        self._logger.debug("Uploading snapshot via Minio")
+                        self._logger.debug("Uploading asset via Minio")
 
                         minio_upload_start = time.time()
 
@@ -1939,9 +2077,7 @@ class OctoslackPlugin(
                             minioURI = "http://{endpoint}/{bucket}/".format(
                                 endpoint=minio_config["Endpoint"], bucket=minioBucket
                             )
-                        uploadFilename = (
-                            "Snapshot_" + str(uuid.uuid1()).replace("-", "") + ".png"
-                        )
+                        uploadFilename = dest_filename
 
                         minioClient = Minio(
                             minio_config["Endpoint"],
@@ -1958,20 +2094,20 @@ class OctoslackPlugin(
                         )
                         minio_upload_elapsed = time.time() - minio_upload_start
                         self._logger.debug(
-                            "Uploaded snapshot to Minio in "
+                            "Uploaded asset to Minio in "
                             + str(round(minio_upload_elapsed, 2))
                             + " seconds"
                         )
 
-                        return minioURI + uploadFilename, snapshot_errors
+                        return minioURI + uploadFilename, error_msgs, None
                     except Exception as e:
                         self._logger.exception(
-                            "Failed to upload snapshot to Minio: " + str(e)
+                            "Failed to upload asset to Minio: " + str(e)
                         )
-                        snapshot_errors.append("Minio error: " + str(e))
+                        error_msgs.append("Minio error: " + str(e))
                 elif snapshot_upload_method == "IMGUR":
                     try:
-                        self._logger.debug("Uploading snapshot via Imgur")
+                        self._logger.debug("Uploading asset via Imgur")
 
                         imgur_upload_start = time.time()
 
@@ -2009,6 +2145,7 @@ class OctoslackPlugin(
                         if not imgur_album_id == None:
                             imgur_upload_config["album"] = imgur_album_id
 
+                            imgur_upload_config["title"] = dest_filename
                             ##imgur_upload_config['title'] = 'ImageTitle123'
                             ##imgur_upload_config['description'] = 'ImageDescription123'
 
@@ -2030,13 +2167,13 @@ class OctoslackPlugin(
 
                         imgur_upload_elapsed = time.time() - imgur_upload_start
                         self._logger.debug(
-                            "Uploaded snapshot to Imgur in "
+                            "Uploaded asset to Imgur in "
                             + str(round(imgur_upload_elapsed, 2))
                             + " seconds"
                         )
 
                         imgurUrl = imgurUploadRsp["link"]
-                        return imgurUrl, snapshot_errors
+                        return imgurUrl, error_msgs, None
                     except ImgurClientError as ie:
                         self._logger.exception(
                             "Failed to upload snapshot to Imgur (ImgurClientError): "
@@ -2048,30 +2185,97 @@ class OctoslackPlugin(
                             self._logger.exception(
                                 "ImgurError: " + str(self.tmp_imgur_client.credits)
                             )
-                        snapshot_errors.append("Imgur error: " + str(ie.error_message))
+                        error_msgs.append("Imgur error: " + str(ie.error_message))
                     except ImgurClientRateLimitError as rle:
                         self._logger.exception(
                             "Failed to upload snapshot to Imgur (ImgurClientRateLimitError): "
                             + str(rle)
                         )
-                        snapshot_errors.append("Imgur error: " + str(rle))
+                        error_msgs.append("Imgur error: " + str(rle))
                     except Exception as e:
                         self._logger.exception(
                             "Failed to upload snapshot to Imgur (Exception): " + str(e)
                         )
-                        snapshot_errors.append("Imgur error: " + str(e))
+                        error_msgs.append("Imgur error: " + str(e))
                 elif snapshot_upload_method == "SLACK":
-                    # Return the file object, the bot post will upload
-                    keep_local_file = True
-                    return local_file_path, None
+                    return self.upload_slack_asset(
+                        local_file_path,
+                        dest_filename,
+                        dest_filename,
+                        channels,
+                        error_msgs,
+                    )
             except Exception as e:
-                self._logger.exception("Snapshot capture error: %s" % str(e))
-                snapshot_errors.append("Snapshot error: " + str(e.message))
+                self._logger.exception("Asset upload error: %s" % str(e))
+                error_msgs.append(str(e.message))
             finally:
-                if local_file_path and not keep_local_file:
+                if local_file_path:
                     os.remove(local_file_path)
                 self.tmp_imgur_client = None
-        return None, snapshot_errors
+        return None, error_msgs, None
+
+    def upload_slack_asset(
+        self, local_file_path, dest_filename, file_description, channels, error_msgs
+    ):
+        self._logger.debug("Uploading asset via Slack")
+
+        if channels == None or len(channels) == 0:
+            self._logger.exception("Slack asset upload failed. Channels list was empty")
+            error_msgs.append("Slack channels list was empty")
+            return None, error_msgs, None
+
+        slack_upload_start = time.time()
+
+        slackAPIConnection = None
+
+        slackAPIToken = self._settings.get(["slack_apitoken_config"], merged=True).get(
+            "api_token"
+        )
+
+        if not slackAPIToken == None:
+            slackAPIToken = slackAPIToken.strip()
+
+        if slackAPIToken and len(slackAPIToken) > 0:
+            slackAPIConnection = Slacker(slackAPIToken, timeout=SLACKER_TIMEOUT)
+
+        if slackAPIConnection == None:
+            self._logger.exception("Slack API connection unavailable")
+            error_msgs.append("Slack API connection unavailable")
+            return None, error_msgs, None
+
+        asset_msg = {
+            "file_": local_file_path,
+            "filename": dest_filename,
+            "title": file_description,
+            "channels": channels,
+        }
+
+        self._logger.debug("Uploading file to Slack: " + str(asset_msg))
+        resp = slackAPIConnection.files.upload(**asset_msg)
+        self._logger.debug("Slack API upload snapshot response: " + resp.raw)
+
+        error_msg = None
+
+        if resp == None:
+            error_msg = "Unknown"
+        elif not resp.successful:
+            error_msg = resp.error
+
+        if not error_msg == None:
+            self._logger.exception(
+                "Slack asset upload failed. Error: " + str(error_msg)
+            )
+            error_msgs.append(str(error_msg))
+            return None, error_msgs, None
+
+        slack_upload_elapsed = time.time() - slack_upload_start
+        self._logger.debug(
+            "Uploaded asset to Slack in "
+            + str(round(slack_upload_elapsed, 2))
+            + " seconds"
+        )
+        download_url = resp.body.get("file").get("url_private_download")
+        return download_url, error_msgs, resp
 
     def retrieve_snapshot_images(self):
         urls = []
@@ -2111,7 +2315,7 @@ class OctoslackPlugin(
         threads = []
         thread_responses = []
         downloaded_images = []
-        snapshot_errors = []
+        error_msgs = []
         download_start = time.time()
 
         idx = 0
@@ -2149,7 +2353,7 @@ class OctoslackPlugin(
             if not downloaded_image == None:
                 downloaded_images.append(downloaded_image)
             if not error_msg == None:
-                snapshot_errors.append(error_msg)
+                error_msgs.append(error_msg)
 
                 ## The single returned image will be deleted by the caller
 
@@ -2160,10 +2364,10 @@ class OctoslackPlugin(
             ## downloaded_images will be deleted internally by combine_images
             combined_image, error_msg = self.combine_images(downloaded_images)
             if not error_msg == None:
-                snapshot_errors.append(error_msg)
-            return combined_image, snapshot_errors
+                error_msgs.append(error_msg)
+            return combined_image, error_msgs
         else:
-            return downloaded_images[0], snapshot_errors
+            return downloaded_images[0], error_msgs
 
     def download_image(self, url, flip_h, flip_v, rotate_90, rsp_idx, responses):
         imgData = None
