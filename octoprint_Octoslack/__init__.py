@@ -2196,7 +2196,8 @@ class OctoslackPlugin(
                         )
                         if not self.tmp_imgur_client == None:
                             self._logger.exception(
-                                "ImgurError: " + str(self.tmp_imgur_client.credits)
+                                "ImgurClient Credits: "
+                                + str(self.tmp_imgur_client.credits)
                             )
                         error_msgs.append("Imgur error: " + str(ie.error_message))
                     except ImgurClientRateLimitError as rle:
@@ -2204,6 +2205,11 @@ class OctoslackPlugin(
                             "Failed to upload snapshot to Imgur (ImgurClientRateLimitError): "
                             + str(rle)
                         )
+                        if not self.tmp_imgur_client == None:
+                            self._logger.exception(
+                                "ImgurClient Credits: "
+                                + str(self.tmp_imgur_client.credits)
+                            )
                         error_msgs.append("Imgur error: " + str(rle))
                     except Exception as e:
                         self._logger.exception(
