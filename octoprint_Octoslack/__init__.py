@@ -1630,24 +1630,11 @@ class OctoslackPlugin(
             snapshot_url_to_append = None
             snapshot_msg = None
 
+            snapshot_error_msgs = None
+
             if includeSnapshot:
                 hosted_url, error_msgs, slack_rsp = self.upload_snapshot()
-
-                if error_msgs:
-                    if text == None:
-                        text = ""
-                    elif len(text) > 0:
-                        text += "\n"
-
-                    text += self.bold_text() + "Snapshot error(s):" + self.bold_text()
-                    if self.mattermost_mode():
-                        text += "\n* " + "\n* ".join(error_msgs)
-                    else:
-                        text += "\n"
-
-                        for error_msg in error_msgs:
-                            text += "\n *-* "
-                            text += error_msg
+                snapshot_error_msgs = error_msgs
 
                 if hosted_url:
                     if (
@@ -1681,10 +1668,36 @@ class OctoslackPlugin(
                                     "filename": "snapshot.jpg",
                                     "description": desc,
                                 }
+                        else:
+                            if snapshot_error_msgs == None:
+                                snapshot_error_msgs = []
+
+                            self._logger.error(
+                                "Slack API connection required for Slack asset uploads"
+                            )
+                            snapshot_error_msgs.append(
+                                "Slack API connection required for Slack asset uploads"
+                            )
                     else:
                         attachment["image_url"] = hosted_url
                         if self.mattermost_mode():
                             snapshot_url_to_append = hosted_url
+
+            if snapshot_error_msgs:
+                if text == None:
+                    text = ""
+                elif len(text) > 0:
+                    text += "\n"
+
+                text += self.bold_text() + "Snapshot error(s):" + self.bold_text()
+                if self.mattermost_mode():
+                    text += "\n* " + "\n* ".join(error_msgs)
+                else:
+                    text += "\n"
+
+                    for error_msg in snapshot_error_msgs:
+                        text += "\n *-* "
+                        text += error_msg
 
             if self.mattermost_mode() and not footer == None and len(footer) > 0:
                 if text == None:
@@ -2217,6 +2230,15 @@ class OctoslackPlugin(
     def upload_slack_asset(
         self, local_file_path, dest_filename, file_description, channels, error_msgs
     ):
+        if error_msgs == None:
+            error_msgs = []
+
+        connection_method = self._settings.get(["connection_method"], merged=True)
+        if connection_method == None or connection_method != "APITOKEN":
+            self._logger.error("Slack API connection required for Slack asset uploads")
+            error_msgs.append("Slack API connection required for Slack asset uploads")
+            return None, error_msgs, None
+
         self._logger.debug("Uploading asset via Slack")
 
         if channels == None or len(channels) == 0:
