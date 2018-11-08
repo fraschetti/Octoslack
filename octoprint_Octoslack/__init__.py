@@ -19,6 +19,7 @@ import base64
 import json
 import os
 import os.path
+import exceptions
 import uuid
 import time
 import datetime
@@ -1016,9 +1017,14 @@ class OctoslackPlugin(
                 else:
                     rpi_tmp = None
             except Exception as e:
-                self._logger.exception(
-                    "Failed to read Raspberry Pi temp - Error: " + str(e)
-                )
+                if type(e) == exceptions.OSError and e.errno == 2:
+                    self._logger.error(
+                        "Unable to execute Raspberry Pi command (/opt/vc/bin/vcgencmd)"
+                    )
+                else:
+                    self._logger.exception(
+                        "Error reading Raspberry Pi temp - Error: " + str(e)
+                    )
 
             if not rpi_tmp == None:
                 if len(footer) > 0:
@@ -1568,6 +1574,10 @@ class OctoslackPlugin(
                 time_str += "1 second"
 
         return time_str
+
+    _bot_progress_last_req = None
+    _bot_progress_last_snapshot = None
+    _slack_next_progress_snapshot_time = 0
 
     def send_slack_message(
         self,
