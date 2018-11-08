@@ -2188,13 +2188,13 @@ class OctoslackPlugin(
                             + str(os.path.isfile(local_file_path))
                         )
 
-                        ##Required to work around imgurpython library no longer matching the actual Imgur API behavior
-                        ##The library expects a 403 to issue the token refresh but Imgur is no longer returning a 403
+                        ##Required to work around Imgur servers not always properly returning a 403
                         imgur_client.auth.refresh()
 
                         imgurUploadRsp = imgur_client.upload_from_path(
                             local_file_path, config=imgur_upload_config, anon=False
                         )
+
                         self._logger.debug(
                             "Imgur upload response: " + str(imgurUploadRsp)
                         )
