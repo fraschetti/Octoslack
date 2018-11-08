@@ -1259,10 +1259,17 @@ class OctoslackPlugin(
                         time.sleep(5 * 1000)
 
                         ##Reinitialize the connection
+                        self._logger.debug(
+                            "Reconnecting Slack RTM API after connection error"
+                        )
                         sc = SlackClient(slackAPIToken)
                         sc.rtm_connect()
-                        if not sc.rtm_connect():
-                            self._logger.error("Failed to connect via Slack RTM API")
+                        if sc.rtm_connect():
+                            self._logger.debug(
+                                "Successfully reconnected via Slack RTM API"
+                            )
+                        else:
+                            self._logger.error("Failed to reconnect via Slack RTM API")
                             break
                     except Exception as e:
                         self._logger.error("RTM API read error (Exception): " + str(e))
