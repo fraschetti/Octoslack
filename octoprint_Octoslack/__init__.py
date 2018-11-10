@@ -2163,6 +2163,22 @@ class OctoslackPlugin(
                         else:
                             imgur_album_id = imgur_album_id.strip()
 
+                        if (
+                            imgur_client_id == None
+                            or len(imgur_client_id) == 0
+                            or imgur_client_secret == None
+                            or len(imgur_client_secret) == 0
+                            or imgur_client_refresh_token == None
+                            or len(imgur_client_refresh_token) == 0
+                        ):
+                            self._logger.error(
+                                "Imgur config incomplete. Check Octoslack UI"
+                            )
+                            error_msgs.append(
+                                "Imgur error: Incomplete Imgur settings in Octoslack UI"
+                            )
+                            return None, error_msgs, None
+
                         imgur_client = ImgurClient(
                             imgur_client_id,
                             imgur_client_secret,
@@ -2189,7 +2205,16 @@ class OctoslackPlugin(
                         )
 
                         ##Required to work around Imgur servers not always properly returning a 403
-                        imgur_client.auth.refresh()
+                        if imgur_client.auth == None:
+                            self._logger.error(
+                                "Imgur auth not initialized. Missing refresh_token?"
+                            )
+                            error_msgs.append(
+                                "Imgur error: Auth not initialized. Has Refresh Token been configured?"
+                            )
+                            return None, error_msgs, None
+                        else:
+                            imgur_client.auth.refresh()
 
                         imgurUploadRsp = imgur_client.upload_from_path(
                             local_file_path, config=imgur_upload_config, anon=False
