@@ -2164,18 +2164,14 @@ class OctoslackPlugin(
                             imgur_album_id = imgur_album_id.strip()
 
                         if (
-                            imgur_client_id == None
-                            or len(imgur_client_id) == 0
-                            or imgur_client_secret == None
-                            or len(imgur_client_secret) == 0
-                            or imgur_client_refresh_token == None
+                            imgur_client_refresh_token == None
                             or len(imgur_client_refresh_token) == 0
-                        ):
+                        ) and (imgur_album_id and len(imgur_album_id) > 0):
                             self._logger.error(
-                                "Imgur config incomplete. Check Octoslack UI"
+                                "Usage of an Imgur Album ID requires a valid Refresh Token"
                             )
                             error_msgs.append(
-                                "Imgur error: Incomplete Imgur settings in Octoslack UI"
+                                "Imgur error: Use of an Album ID requires a valid Refresh Token"
                             )
                             return None, error_msgs, None
 
@@ -2205,15 +2201,8 @@ class OctoslackPlugin(
                         )
 
                         ##Required to work around Imgur servers not always properly returning a 403
-                        if imgur_client.auth == None:
-                            self._logger.error(
-                                "Imgur auth not initialized. Missing refresh_token?"
-                            )
-                            error_msgs.append(
-                                "Imgur error: Auth not initialized. Has Refresh Token been configured?"
-                            )
-                            return None, error_msgs, None
-                        else:
+                        if imgur_client.auth:
+                            self._logger.debug("Executing manual Imgur auth refresh")
                             imgur_client.auth.refresh()
 
                         imgurUploadRsp = imgur_client.upload_from_path(

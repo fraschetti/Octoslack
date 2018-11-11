@@ -277,6 +277,7 @@
                 <input type="text" id="octoslack_imgur_refresh_token" class="octoslack_width_auto" size="60" data-bind="value: settings.plugins.Octoslack.imgur_config.refresh_token">
             </div>
 	    <small class="muted">
+                Once you've provided the Imgur Client ID above, click <a href="#" id="octoslack_imgur_auth_link">here</a> to approve this application and generate the needed refresh_token
                 The refresh token is made available once this application has been authorized. Because this integration isn't via a publically accessible web site/service, we'll need to manually copy/paste the refresh_token provided by the authorization page to this configuration screen.
                 <br/>
                 <br/>
@@ -287,11 +288,7 @@
                 <br/>
                 Optionally you can also just paste the entire URL (with the refresh_token argument) into the field above and the plugin will extract what it needs automatically
                 <br/>
-                <br/>
             </small>
-	    <div class="muted">
-                Once you've provided the Imgur Client ID above, click <a href="#" id="octoslack_imgur_auth_link">here</a> to approve this application and generate the needed refresh_token
-            </div>
             <div class="octoprint_config_row">
                 <br/>
                 <span class="octoslack_label">Imgur Album ID</span>
@@ -311,6 +308,8 @@
                 Optionally you can also just paste the entire album URL into the field above and the plugin will extract what it needs automatically
                 <br/>
 		NOTE: If you see 'You are not the owner of album xyz' error messages, please confirm you have properly configured the refresh_token above after approving access to your Imgur application
+                <br/>
+                NOTE: Use of an Album ID requires a valid Imgur Refresh Token
             </small>
         </div>
         <div id="octolack_s3_group" class="octoslack_hidden">
