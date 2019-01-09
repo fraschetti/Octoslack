@@ -1497,7 +1497,7 @@ class OctoslackPlugin(
             ##Generate TZ adjusted timestamp
             tz = pytz.timezone(tz_config)
             utc_time = datetime.datetime.utcnow().replace(tzinfo=pytz.utc)
-            eta = utc_time.astimezone(tz)
+            eta = utc_time.astimezone(tz) + datetime.timedelta(seconds=seconds)
 
         ##Config UI string, not an actual python date/time format string
         selected_date_format = self._settings.get(["eta_date_format"], merged=True)
