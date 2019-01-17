@@ -374,18 +374,46 @@ var Octoslack = {
         events_container.html(eventsHtml);
     },
 
-    updateGcodeEventTitle : function(elem) {
-        var titleElemId = elem.getAttribute('titleelem');
-        if (titleElemId == undefined) return;
+    updateGcodeEventTitle : function(internalName) {
+        if(!internalName) return;
+
+	internalName = internalName.trim();
+	if(internalName.length == 0) return;
+
+        var gcodeElemId = "octoslack_event_" + internalName + "_gcode";
+	var gcodeTypeElemId = "octoslack_event_" + internalName + "_gcode_type";
+        var titleElemId = "octoslack_event_" + internalName + "_gcode_title";
+
+        var gcodeElem = $("#" + gcodeElemId);
+        if (gcodeElem == undefined) return;
+
+        var gcodeTypeElem = $("#" + gcodeTypeElemId);
+        if (gcodeTypeElem == undefined) return;
 
         var titleElem = $("#" + titleElemId);
         if (titleElem == undefined) return;
 
-        var newTitle = elem.value.trim();
-        if (newTitle.length == 0)
-            newTitle = "...";
+	var gcodeVal = gcodeElem.val().trim();
+	var typeVal = gcodeTypeElem.val().trim();
+
+        var newTitle = this.buildGcodeEventTitle(gcodeVal, typeVal);
 
         titleElem.text(newTitle);
+    },
+
+    buildGcodeEventTitle : function(gcode, type) {
+        if(type == "sent")
+            type = "Sent";
+        else
+            type = "Received";
+
+        var newTitle;
+        if (gcode.length == 0)
+            newTitle = "...";
+        else
+            newTitle = "[" + type + "] " + this.escapeHtml(gcode);
+
+        return newTitle;
     },
 
     buildOctoPrintEventConfigRow : function(eventType, events, action_text, action_handler) {
@@ -419,6 +447,8 @@ var Octoslack = {
 
             if(eventType == "GCODE") {
 	        var gcode = event.Gcode;
+	        var gcodeMatchType = event.GcodeMatchType;
+	        var gcodeType = event.GcodeType;
                 var customColor = event.Color
                 customEnabled = event.Enabled;
                 customChannelOverride = event.ChannelOverride;
@@ -428,7 +458,8 @@ var Octoslack = {
 
                 if(gcode == undefined)
                     gcode = "";
-	        eventHtml.push("        <h3><span id='octoslack_event_" + internalName + "_gcode_title'>" + this.escapeHtml(gcode.trim().length == 0 ? "..." : gcode) + "</span></h3>");
+	        eventHtml.push("        <h3><span id='octoslack_event_" + internalName + "_gcode_title'>" + this.buildGcodeEventTitle(gcode, gcodeType) + "</span></h3>");
+
             }
 
             //Enabled
@@ -445,13 +476,48 @@ var Octoslack = {
                 if(gcode == undefined)
                     gcode = "";
 
+		var gcodeTitleHandler = "Octoslack.updateGcodeEventTitle(\"" + internalName + "\");";
+
+                //GcodeType
+	        eventHtml.push("        <div class='octoprint_config_row'>");
+	        eventHtml.push("            <select class='octoslack_select' id='octoslack_event_" + internalName + "_gcode_type' onchange='" + gcodeTitleHandler + "'>");
+	        eventHtml.push("                <option value='sent'" + (!gcodeType || gcodeType == 'sent' ? ' selected' : '') + ">G-code sent</option>");
+	        eventHtml.push("                <option value='received'" + (gcodeType == 'received' ? ' selected' : '') + ">G-code received</option>");
+	        eventHtml.push("            </select>");
+	        eventHtml.push("            <div class='octoslack_label'>G-code type</div>");
+	        eventHtml.push("            <br/>");
+	        eventHtml.push("            <small class='muted'>");
+	        eventHtml.push("                G-code sent = Commands sent from OctoPrint to the printer");
+	        eventHtml.push("                <br/>");
+	        eventHtml.push("                G-code received = Commands/data received from the printer");
+	        eventHtml.push("            </small>");
+	        eventHtml.push("        </div>");
+
+                //GcodeMatchType
+	        eventHtml.push("        <div class='octoprint_config_row'>");
+	        eventHtml.push("            <select class='octoslack_select' id='octoslack_event_" + internalName + "_gcode_match_type'>");
+	        eventHtml.push("                <option value='StartsWith'" + (!gcodeMatchType || gcodeMatchType == 'StartsWith' ? ' selected' : '') + ">Starts with</option>");
+	        eventHtml.push("                <option value='EndsWith'" + (gcodeMatchType == 'EndsWith' ? ' selected' : '') + ">Ends with</option>");
+	        eventHtml.push("                <option value='Contains'" + (gcodeMatchType == 'Contains' ? ' selected' : '') + ">Contains</option>");
+	        eventHtml.push("                <option value='Regex'" + (gcodeMatchType == 'Regex' ? ' selected' : '') + ">Regular expression</option>");
+	        eventHtml.push("            </select>");
+	        eventHtml.push("            <div class='octoslack_label'>G-code match type</div>");
+                eventHtml.push("            <br/>");
+                eventHtml.push("            <small class='muted'>");
+                eventHtml.push('                NOTE: Inefficient regular expressions can incur long execution times which may block OctoPrint\'s communication with your printer.');
+                eventHtml.push("            </small>");
+	        eventHtml.push("        </div>");
+
                 //Gcode
 	        eventHtml.push("        <div class='octoprint_config_row'>");
-	        eventHtml.push("            <input type='text' size='30' id='octoslack_event_" + internalName + "_gcode' onkeydown='Octoslack.updateGcodeEventTitle(this);' onpaste='Octoslack.updateGcodeEventTitle(this);' oninput='Octoslack.updateGcodeEventTitle(this);' onchange='Octoslack.updateGcodeEventTitle(this);' "
+	        eventHtml.push("            <input type='text' size='30' id='octoslack_event_" + internalName + "_gcode' onkeydown='" + gcodeTitleHandler + "' onpaste='" + gcodeTitleHandler + "' oninput='" + gcodeTitleHandler + "' onchange='" + gcodeTitleHandler + "' "
                     + (useDataBind ? "data-bind='value: settings.plugins.Octoslack.supported_events." + internalName + ".Gcode'" : "") 
-                    + " value='" + this.escapeHtml(gcode.trim()) + "'"
-                    + " titleelem='octoslack_event_" + internalName + "_gcode_title'>");
+                    + " value='" + this.escapeHtml(gcode.trim()) + "'>");
 	        eventHtml.push("            <div class='octoslack_label octoslack_action_label'>G-code</div>");
+                eventHtml.push("            <br/>");
+                eventHtml.push("            <small class='muted'>");
+                eventHtml.push('                The G-code/text pattern or regular expression to match against sent/received G-code.');
+                eventHtml.push("            </small>");
 	        eventHtml.push("        </div>");
 
                 //Color
@@ -736,6 +802,7 @@ var Octoslack = {
 
 	var empty_event = [
 		{ "InternalName" : String(Date.now()), 
+                  "GcodeType" : "sent", 
                   "Gcode" : "", 
                   "Color" : "good", 
                   "Enabled" : true, 
@@ -789,6 +856,8 @@ var Octoslack = {
 
             var enabled = $("#octoslack_event_" + internalName + "_enabled").is(':checked');
             var gcode = $("#octoslack_event_" + internalName + "_gcode").val();
+            var gcodematchtype = $("#octoslack_event_" + internalName + "_gcode_match_type").val();
+            var gcodetype = $("#octoslack_event_" + internalName + "_gcode_type").val();
             var color = $("#octoslack_event_" + internalName + "_color").val();
             var channeloverride = $("#octoslack_event_" + internalName + "_ChannelOverride").val();
             var snapshot = $("#octoslack_event_" + internalName + "_snapshot").is(':checked');
@@ -797,6 +866,8 @@ var Octoslack = {
 
             gcode_events.push({ "InternalName" : internalName, 
                                   "Gcode" : gcode, 
+                                  "GcodeMatchType" : gcodematchtype, 
+                                  "GcodeType" : gcodetype, 
                                   "Color" : color, 
                                   "Enabled" : enabled, 
                                   "ChannelOverride" : channeloverride, 

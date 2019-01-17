@@ -427,7 +427,7 @@ class OctoslackPlugin(
             octoprint.plugin.SettingsPlugin.on_settings_save(self, data)
             self.update_progress_timer()
             self.update_heartbeat_timer()
-            self.update_gcode_listeners()
+            self.update_gcode_sent_listeners()
             self._slack_next_progress_snapshot_time = 0
         except Exception as e:
             self._logger.exception(
@@ -478,7 +478,7 @@ class OctoslackPlugin(
         self.start_rtm_client()
         self._logger.debug("Started Slack RTM client")
 
-        self.update_gcode_listeners()
+        self.update_gcode_sent_listeners()
 
         self.start_heartbeat_timer()
 
@@ -2742,8 +2742,10 @@ class OctoslackPlugin(
                 ##~~ GCode processing
 
     active_gcode_events = []
+    active_gcode_received_events = []
+    active_gcode_event_regexes = dict()
 
-    def update_gcode_listeners(self):
+    def update_gcode_sent_listeners(self):
         try:
             self._logger.debug("Updating G-code listeners")
 
@@ -2751,12 +2753,14 @@ class OctoslackPlugin(
                 ["gcode_events"], merged=True
             )
 
+            new_gcode_events = []
+            new_gcode_received_events = []
+            new_gcode_event_regexes = dict()
+
             if events_str == None or len(events_str.strip()) == 0:
                 tmp_gcode_events = []
             else:
                 tmp_gcode_events = json.loads(events_str)
-
-            new_gcode_events = []
 
             for gcode_event in tmp_gcode_events:
                 if (
@@ -2765,12 +2769,41 @@ class OctoslackPlugin(
                 ):
                     continue
 
-                new_gcode_events.append(gcode_event)
+                if (
+                    "GcodeMatchType" in gcode_event
+                    and gcode_event["GcodeMatchType"] == "Regex"
+                ):
+                    internalName = gcode_event["InternalName"]
+                    regex_text = gcode_event["Gcode"]
+                    if len(regex_text.strip()) == 0:
+                        continue
+                    try:
+                        compiled_regex = re.compile(regex_text)
+                        new_gcode_event_regexes[internalName] = compiled_regex
+                    except Exception as e:
+                        self._logger.exception(
+                            "Failed to compile G-code match regular expression: "
+                            + regex_text
+                            + ", Error: "
+                            + str(e)
+                        )
+
+                if not "GcodeType" in gcode_event or gcode_event["GcodeType"] == "sent":
+                    new_gcode_events.append(gcode_event)
+                else:
+                    new_gcode_received_events.append(gcode_event)
 
             self.active_gcode_events = new_gcode_events
+            self.active_gcode_received_events = new_gcode_received_events
+            self.active_gcode_event_regexes = new_gcode_event_regexes
 
             self._logger.debug(
-                "Active G-code events: " + json.dumps(self.active_gcode_events)
+                "Active G-code sent events: " + json.dumps(self.active_gcode_events)
+            )
+
+            self._logger.debug(
+                "Active G-code received events: "
+                + json.dumps(self.active_gcode_received_events)
             )
 
         except Exception as e:
@@ -2789,26 +2822,98 @@ class OctoslackPlugin(
         try:
             for gcode_event in self.active_gcode_events:
                 trigger_gcode = gcode_event["Gcode"]
+                if "GcodeMatchType" in gcode_event:
+                    match_type = gcode_event["GcodeMatchType"]
+                else:
+                    match_type = None
 
-                if trigger_gcode == None or len(trigger_gcode.strip()) == 0:
-                    continue
-
-                trigger_gcode = trigger_gcode.strip()
-
-                if cmd.startswith(trigger_gcode):
-                    self._logger.debug("Caught command: " + self.remove_non_ascii(cmd))
+                if self.evaluate_gcode_trigger(
+                    cmd, gcode_event, match_type, trigger_gcode
+                ):
+                    self._logger.debug(
+                        "Caught sent G-code: " + self.remove_non_ascii(cmd)
+                    )
                     self.handle_event(
                         "GcodeEvent", None, {"cmd": cmd}, True, gcode_event
                     )
         except Exception as e:
             self._logger.exception(
-                "Error attempting to match G-code command to the configured events, G-code: "
+                "Error attempting to match sent G-code command to the configured events, G-code: "
                 + gcode
                 + ", Error: "
                 + str(e.message)
             )
 
         return (cmd,)
+
+    def received_gcode(self, comm_instance, line, *args, **kwargs):
+        if (
+            not line
+            or self.active_gcode_received_events == None
+            or len(self.active_gcode_received_events) == 0
+        ):
+            return line
+
+        try:
+            for gcode_event in self.active_gcode_received_events:
+                trigger_gcode = gcode_event["Gcode"]
+                if "GcodeMatchType" in gcode_event:
+                    match_type = gcode_event["GcodeMatchType"]
+                else:
+                    match_type = None
+
+                if self.evaluate_gcode_trigger(
+                    line, gcode_event, match_type, trigger_gcode
+                ):
+                    self._logger.debug(
+                        "Caught received G-code: " + self.remove_non_ascii(line)
+                    )
+                    self.handle_event(
+                        "GcodeEvent", None, {"cmd": line}, True, gcode_event
+                    )
+        except Exception as e:
+            self._logger.exception(
+                "Error attempting to match received G-code command to the configured events, G-code: "
+                + line
+                + ", Error: "
+                + str(e.message)
+            )
+
+        return line
+
+    def evaluate_gcode_trigger(
+        self, input_gcode, gcode_event, match_type, trigger_gcode
+    ):
+        if input_gcode == None or trigger_gcode == None:
+            return False
+
+        if match_type == None or len(match_type) == 0:
+            match_type = "StartsWith"
+
+        input_gcode = input_gcode.strip()
+        trigger_gcode = trigger_gcode.strip()
+
+        if len(input_gcode) == 0 or len(trigger_gcode) == 0:
+            return False
+
+        if match_type == "StartsWith":
+            return input_gcode.startswith(trigger_gcode)
+        elif match_type == "EndsWith":
+            return input_gcode.endswith(trigger_gcode)
+        elif match_type == "Contains":
+            return trigger_gcode in input_gcode
+        elif match_type == "Regex":
+            internalName = gcode_event["InternalName"]
+            if not internalName in self.active_gcode_event_regexes:
+                return False
+
+            gcode_match_regex = self.active_gcode_event_regexes[internalName]
+            matches = gcode_match_regex.search(input_gcode)
+            if matches:
+                return True
+            return False
+
+        return False
 
     non_ascii_regex = re.compile(r"[^\x00-\x7F]")
 
@@ -2824,4 +2929,5 @@ def __plugin_load__():
     __plugin_hooks__ = {
         "octoprint.plugin.softwareupdate.check_config": __plugin_implementation__.get_update_information,
         "octoprint.comm.protocol.gcode.sending": __plugin_implementation__.sending_gcode,
+        "octoprint.comm.protocol.gcode.received": __plugin_implementation__.received_gcode,
     }
