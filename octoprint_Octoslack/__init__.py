@@ -910,7 +910,10 @@ class OctoslackPlugin(
             else:
                 estimatedPrintTimeStr = self.format_duration(estimatedPrintTime)
 
-            estimatedFinish = self.format_eta(estimatedPrintTime)
+            if self._printer.is_printing():
+                estimatedFinish = self.format_eta(estimatedPrintTime)
+            else:
+                estimatedFinish = "N/A"
 
             replacement_params["{remaining_time}"] = estimatedPrintTimeStr
             replacement_params["{eta}"] = estimatedFinish
@@ -923,7 +926,7 @@ class OctoslackPlugin(
                 + estimatedPrintTimeStr
             )
 
-            if event != "PrintDone":
+            if event != "PrintDone" and self._printer.is_printing():
                 text_arr.append(
                     self.bold_text() + "ETA" + self.bold_text() + " " + estimatedFinish
                 )
@@ -952,7 +955,7 @@ class OctoslackPlugin(
             time_left_str = replacement_params["{remaining_time}"]
 
         ##Use existing ETA if it's already been set
-        if replacement_params["{eta}"] == "N/A":
+        if replacement_params["{eta}"] == "N/A" and self._printer.is_printing():
             eta_str = self.format_eta(time_left)
             replacement_params["{eta}"] = eta_str
         else:
@@ -965,7 +968,11 @@ class OctoslackPlugin(
             text_arr.append(
                 self.bold_text() + "Remaining" + self.bold_text() + " " + time_left_str
             )
-            text_arr.append(self.bold_text() + "ETA" + self.bold_text() + " " + eta_str)
+
+            if self._printer.is_printing():
+                text_arr.append(
+                    self.bold_text() + "ETA" + self.bold_text() + " " + eta_str
+                )
 
             ##Is rendered as a footer so it's safe to always include this
         if reportPrinterState:
@@ -1217,16 +1224,18 @@ class OctoslackPlugin(
 
     def execute_rtm_loop(self, slackAPIToken):
         try:
+            ping_interval = 5
+
             slackAPIConnection = Slacker(slackAPIToken, timeout=SLACKER_TIMEOUT)
 
             auth_rsp = slackAPIConnection.auth.test()
             self._logger.debug(
-                "API Key auth test response: " + json.dumps(auth_rsp.body)
+                "Slack RTM API Key auth test response: " + json.dumps(auth_rsp.body)
             )
 
             if auth_rsp.successful == None or auth_rsp.successful == False:
                 self._logger.error(
-                    "API Key auth test failed: " + json.dumps(auth_rsp.body)
+                    "Slack RTM API Key auth test failed: " + json.dumps(auth_rsp.body)
                 )
                 return
 
@@ -1234,52 +1243,96 @@ class OctoslackPlugin(
             self._logger.debug("Slack RTM Bot user id: " + self.bot_user_id)
 
             self._logger.debug("Starting Slack RTM wait loop")
-            sc = SlackClient(slackAPIToken)
 
-            if sc.rtm_connect():
-                self._logger.debug("Successfully connected via Slack RTM API")
+            sc = None
+            connection_attempt = 0
+            next_ping = 0
 
-                while self.rtm_keep_running:
+            while self.rtm_keep_running:
+
+                while sc == None or not sc.server.connected:
                     try:
-                        read_msgs = sc.rtm_read()
-                        if not read_msgs == None and len(read_msgs) > 0:
-                            for msg in read_msgs:
-                                try:
-                                    self.process_rtm_message(slackAPIToken, msg)
-                                except Exception as e:
-                                    self._logger.error(
-                                        "RTM message processing error: " + str(e)
-                                    )
-                        time.sleep(1)
-                    except WebSocketConnectionClosedException as ce:
-                        self._logger.error(
-                            "RTM API read error (WebSocketConnectionClosedException): "
-                            + str(ce.message)
-                        )
-                        time.sleep(5 * 1000)
-
-                        ##Reinitialize the connection
                         self._logger.debug(
-                            "Reconnecting Slack RTM API after connection error"
+                            "Attempting to connect Slack RTM API (iteration="
+                            + str(connection_attempt)
+                            + ")"
                         )
+
+                        if sc == None:
+                            wait_delay = 0
+                        else:
+                            wait_delay = self.get_rtm_reconnect_delay(
+                                connection_attempt
+                            )
+
+                        if wait_delay > 0:
+                            self._logger.debug(
+                                "Sleeping for "
+                                + str(wait_delay)
+                                + " seconds before attempting connection"
+                            )
+                            time.sleep(wait)
+
+                        ##Slack's client doesn't expose the underlying websocket/socket
+                        ##so we unfortunately need to rely on Python's GC to handle
+                        ##the socket disconnect
                         sc = SlackClient(slackAPIToken)
-                        sc.rtm_connect()
-                        if sc.rtm_connect():
+                        if sc.rtm_connect(with_team_state=False, auto_reconnect=True):
                             self._logger.debug(
                                 "Successfully reconnected via Slack RTM API"
                             )
+                            connection_attempt = 0
+                            next_ping = time.time() + ping_interval
                         else:
                             self._logger.error("Failed to reconnect via Slack RTM API")
-                            break
+                            connection_attempt += 1
                     except Exception as e:
-                        self._logger.error("RTM API read error (Exception): " + str(e))
-                        time.sleep(5 * 1000)
-            else:
-                self._logger.error("Failed to connect via Slack RTM API")
+                        self._logger.error(
+                            "Error Slack RTM API connection error (Exception): "
+                            + str(e)
+                        )
+                        connection_attempt += 1
 
-            self._logger.debug("Finished Slack RTM wait loop")
+                try:
+                    if next_ping > 0 and time.time() >= next_ping:
+                        ping_rsp = sc.server.ping()
+                        next_ping = time.time() + ping_interval
+
+                    read_msgs = sc.rtm_read()
+                    if read_msgs:
+                        for msg in read_msgs:
+                            try:
+                                self.process_rtm_message(slackAPIToken, msg)
+                            except Exception as e:
+                                self._logger.error(
+                                    "Slack RTM message processing error: " + str(e)
+                                )
+                    else:
+                        time.sleep(0.5)
+                except WebSocketConnectionClosedException as ce:
+                    self._logger.error(
+                        "Slack RTM API read error (WebSocketConnectionClosedException): "
+                        + str(ce.message)
+                    )
+                    sc = None
+                except Exception as e:
+                    self._logger.error(
+                        "Slack RTM API read error (Exception): " + str(e)
+                    )
+            self._logger.debug("Finished Slack RTM read loop")
         except Exception as e:
-            self._logger.exception("Error in rtm loop, Error: " + str(e.message))
+            self._logger.exception(
+                "Error in Slack RTM read loop, Error: " + str(e.message)
+            )
+
+    def get_rtm_reconnect_delay(self, iteration):
+        max_delay = 300  ##5 minutes
+
+        delay = math.pow(2, iteration) * 5
+        if delay <= 0 or delay > max_delay:
+            return max_delay
+
+        return delay
 
     def process_rtm_message(self, slackAPIToken, message):
         if not self._settings.get(["slack_apitoken_config"], merged=True).get(
