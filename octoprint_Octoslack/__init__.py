@@ -1252,18 +1252,17 @@ class OctoslackPlugin(
 
                 while sc == None or not sc.server.connected:
                     try:
+                        ##Roll over the counter to keep delay calculations under control
+                        if connection_attempt > 100:
+                            connection_attempt = 0
+
                         self._logger.debug(
                             "Attempting to connect Slack RTM API (iteration="
                             + str(connection_attempt)
                             + ")"
                         )
 
-                        if sc == None:
-                            wait_delay = 0
-                        else:
-                            wait_delay = self.get_rtm_reconnect_delay(
-                                connection_attempt
-                            )
+                        wait_delay = self.get_rtm_reconnect_delay(connection_attempt)
 
                         if wait_delay > 0:
                             self._logger.debug(
@@ -1271,13 +1270,13 @@ class OctoslackPlugin(
                                 + str(wait_delay)
                                 + " seconds before attempting connection"
                             )
-                            time.sleep(wait)
+                            time.sleep(wait_delay)
 
                         ##Slack's client doesn't expose the underlying websocket/socket
                         ##so we unfortunately need to rely on Python's GC to handle
                         ##the socket disconnect
                         sc = SlackClient(slackAPIToken)
-                        if sc.rtm_connect(with_team_state=False, auto_reconnect=True):
+                        if sc.rtm_connect(with_team_state=False):
                             self._logger.debug(
                                 "Successfully reconnected via Slack RTM API"
                             )
@@ -1288,8 +1287,7 @@ class OctoslackPlugin(
                             connection_attempt += 1
                     except Exception as e:
                         self._logger.error(
-                            "Error Slack RTM API connection error (Exception): "
-                            + str(e)
+                            "Slack RTM API connection error (Exception): " + str(e)
                         )
                         connection_attempt += 1
 
@@ -1326,13 +1324,22 @@ class OctoslackPlugin(
             )
 
     def get_rtm_reconnect_delay(self, iteration):
-        max_delay = 300  ##5 minutes
+        max_delay = 1800  ##30 minutes
 
-        delay = math.pow(2, iteration) * 5
-        if delay <= 0 or delay > max_delay:
+        try:
+            delay = (2 ** iteration) * 5
+            if delay <= 0 or delay > max_delay:
+                return max_delay
+
+            return delay
+        except Exception as e:
+            self._logger.exception(
+                "Slack RTM reconnect delay calculation error (iteration="
+                + str(iteration)
+                + "), Error: "
+                + str(e.message)
+            )
             return max_delay
-
-        return delay
 
     def process_rtm_message(self, slackAPIToken, message):
         if not self._settings.get(["slack_apitoken_config"], merged=True).get(
