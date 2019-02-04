@@ -1226,32 +1226,20 @@ class OctoslackPlugin(
         try:
             ping_interval = 5
 
-            slackAPIConnection = Slacker(slackAPIToken, timeout=SLACKER_TIMEOUT)
-
-            auth_rsp = slackAPIConnection.auth.test()
-            self._logger.debug(
-                "Slack RTM API Key auth test response: " + json.dumps(auth_rsp.body)
-            )
-
-            if auth_rsp.successful == None or auth_rsp.successful == False:
-                self._logger.error(
-                    "Slack RTM API Key auth test failed: " + json.dumps(auth_rsp.body)
-                )
-                return
-
-            self.bot_user_id = auth_rsp.body["user_id"]
-            self._logger.debug("Slack RTM Bot user id: " + self.bot_user_id)
-
             self._logger.debug("Starting Slack RTM wait loop")
 
             sc = None
             connection_attempt = 0
             next_ping = 0
 
-            while self.rtm_keep_running:
+            repeat_error_count = 0
 
+            while self.rtm_keep_running:
                 while sc == None or not sc.server.connected:
                     try:
+                        ##Reset read error count if we're reconnecting
+                        repeat_error_count = 0
+
                         ##Roll over the counter to keep delay calculations under control
                         if connection_attempt > 100:
                             connection_attempt = 0
@@ -1271,6 +1259,27 @@ class OctoslackPlugin(
                                 + " seconds before attempting connection"
                             )
                             time.sleep(wait_delay)
+
+                        slackAPIConnection = Slacker(
+                            slackAPIToken, timeout=SLACKER_TIMEOUT
+                        )
+
+                        auth_rsp = slackAPIConnection.auth.test()
+                        self._logger.debug(
+                            "Slack RTM API Key auth test response: "
+                            + json.dumps(auth_rsp.body)
+                        )
+
+                        if auth_rsp.successful == None or auth_rsp.successful == False:
+                            self._logger.error(
+                                "Slack RTM API Key auth test failed: "
+                                + json.dumps(auth_rsp.body)
+                            )
+                            connection_attempt += 1
+                            continue
+
+                        self.bot_user_id = auth_rsp.body["user_id"]
+                        self._logger.debug("Slack RTM Bot user id: " + self.bot_user_id)
 
                         ##Slack's client doesn't expose the underlying websocket/socket
                         ##so we unfortunately need to rely on Python's GC to handle
@@ -1301,6 +1310,8 @@ class OctoslackPlugin(
                         for msg in read_msgs:
                             try:
                                 self.process_rtm_message(slackAPIToken, msg)
+                                ##Reset error counter if we've successfully processed a message
+                                repeat_error_count = 0
                             except Exception as e:
                                 self._logger.error(
                                     "Slack RTM message processing error: " + str(e)
@@ -1312,11 +1323,40 @@ class OctoslackPlugin(
                         "Slack RTM API read error (WebSocketConnectionClosedException): "
                         + str(ce.message)
                     )
+                    time.sleep(1)
                     sc = None
                 except Exception as e:
+                    error_str = str(e)
+
                     self._logger.error(
-                        "Slack RTM API read error (Exception): " + str(e)
+                        "Slack RTM API read error (Exception): " + error_str
                     )
+
+                    ##Ovserved errors on windows (WebSocketConnectionClosedException was not thrown)
+                    ##HTTPSConnectionPool(host='slack.com', port=443): Max retries exceeded with url: /api/rtm.start (Caused by NewConnectionError('<urllib3.connection.VerifiedHTTPSConnection object at 0x000000000A6FB278>: Failed to establish a new connection: [Errno 11001] getaddrinfo failed',))
+                    ##[Errno 10054] An existing connection was forcibly closed by the remote host
+
+                    if (
+                        "Max retries exceeded" in error_str
+                        or "NewConnectionError" in error_str
+                        or "Errno 10054" in error_str
+                        or "Errno 11001" in error_str
+                        or "forcibly closed" in error_str
+                    ):
+                        self._logger.error(
+                            "Slack RTM API experienced a fatal connection error. Resetting connection."
+                        )
+                        sc = None
+
+                    time.sleep(1)
+                    repeat_error_count += 1
+
+                    if repeat_error_count >= 100:
+                        self._logger.error(
+                            "Slack RTM API experienced 100 back to back read errors. Resetting connection."
+                        )
+                        sc = None
+
             self._logger.debug("Finished Slack RTM read loop")
         except Exception as e:
             self._logger.exception(
