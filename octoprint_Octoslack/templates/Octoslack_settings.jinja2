@@ -337,8 +337,27 @@
                 <input type="number" id="octoslack_s3_retention" step="any" min="1" class="input-mini text-right" data-bind="value: settings.plugins.Octoslack.s3_config.file_expire_days">
                 <span class="octoslack_valign">days</span>
 	        <br/>
-	        <small class="muted">How long should AWS keep uploaded snapshots before they are automatically delted</small>
+	        <small class="muted">How long should AWS keep uploaded snapshots before they are automatically deleted</small>
             </div>
+	    <br/>
+	    <div class="octoprint_config_row">
+                <span class="octoslack_label">AWS S3 URL Style</span>
+	        <select class="octoslack_select" data-bind="value: settings.plugins.Octoslack.s3_config.URLStyle">
+                    <option value="VIRTUAL">Virtual hosted style</option>
+                    <option value="PATH">Path style</option>
+                </select>
+	        <br/>
+	        <small class="muted">
+                    Most users won't need to change this setting as most S3 buckets fully support both URL styles. Some S3 buckets may require a specific style depending on the bucket name, region, or other attribute. Additional S3 bucket access details can be found <a href="https://docs.aws.amazon.com/AmazonS3/latest/dev/UsingBucket.html#access-bucket-intro" target="_blank">here</a>
+                </small>
+	        <p class="octoslack_indented">
+	            <small class="muted">
+	    	        <strong>Virtual hosted style</strong> - https://<strong><i>bucket</i></strong>.s3.amazonaws.com
+	                <br/>
+	                <strong>Path style</strong> - http://s3.amazonaws.com/<strong><i>bucket</i></strong>
+	            </small>
+	        </p>
+	    </div>
         </div>
         <div id="octolack_minio_group" class="octoslack_hidden">
             <br/>
@@ -369,7 +388,6 @@
                 <div class="octoslack_label octoslack_action_label" onclick="$('#octoslack_minio_secure').trigger('click')">Secure Connection</div>
             </div>
         </div>
-	<br/>
         <h3>Additional snapshot URLs</h3>
 	<small class="muted">
 		Credentials for cameras requiring basic authentication (username+password) can be provided via http|https://<strong>username:password</strong>@host:port/path?args

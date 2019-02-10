@@ -52,8 +52,6 @@ class OctoslackPlugin(
     ##TODO FEATURE - add the timelapse gallery for cancelled/failed/completed as a single image
     ##TODO FEATURE - Add support for Imgur image title + description
     ##TODO FEATURE - Optionally upload timelapse video to youtube & send a Slack message when the upload is complete
-    ##TODO ENHANCEMENT - Check every N minutes if Slack RTM client has received any data. Reconnect if it hasn't
-    ##TODO ENHANCEMENT - Remove the need to restart OctoPrint when switching between the Slack API and WebHook
     ##TODO FEATURE - Define a third set of messages for each event to allow sending M117 commands to the printer
     ##TODO ENHANCEMENT - The progress event fires on gcode uploads and triggers Octoslack events. That needs to be fixed.
     ##TODO ENHANCEMENT - Consider extending the progress snapshot minimum interval beyond Slack to other providers
@@ -93,6 +91,7 @@ class OctoslackPlugin(
                 "AWSsecretKey": "",
                 "s3Bucket": "",
                 "file_expire_days": -1,
+                "URLStyle": "PATH",
             },
             "minio_config": {
                 "AccessKey": "",
@@ -2151,6 +2150,7 @@ class OctoslackPlugin(
                         awsSecretKey = s3_config["AWSsecretKey"]
                         s3Bucket = s3_config["s3Bucket"]
                         fileExpireDays = int(s3_config["file_expire_days"])
+                        s3URLStyle = s3_config["URLStyle"]
 
                         s3_expiration = timedelta(days=fileExpireDays)
 
@@ -2175,14 +2175,24 @@ class OctoslackPlugin(
                             + " seconds"
                         )
 
-                        return (
-                            "https://s3.amazonaws.com/"
-                            + s3Bucket
-                            + "/"
-                            + uploadFilename,
-                            error_msgs,
-                            None,
-                        )
+                        if s3URLStyle and s3URLStyle == "VIRTUAL":
+                            return (
+                                "https://"
+                                + s3Bucket
+                                + ".s3.amazonaws.com/"
+                                + uploadFilename,
+                                error_msgs,
+                                None,
+                            )
+                        else:
+                            return (
+                                "https://s3.amazonaws.com/"
+                                + s3Bucket
+                                + "/"
+                                + uploadFilename,
+                                error_msgs,
+                                None,
+                            )
                     except Exception as e:
                         self._logger.exception(
                             "Failed to upload asset to S3: " + str(e)
