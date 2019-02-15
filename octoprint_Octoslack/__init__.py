@@ -993,20 +993,29 @@ class OctoslackPlugin(
                         )
                     elif key.startswith("tool"):
                         nozzle_name = "Nozzle"
-                        if len(printer_temps) > 2:
-                            nozzle_name += key[4:]
+                        printer_profile = self._printer_profile_manager.get_current_or_default()
+                        shared_nozzle = printer_profile["extruder"]["sharedNozzle"]
+                        nozzle_number = key[4:]
 
-                        temp_str += (
-                            ", "
-                            + nozzle_name
-                            + ": "
-                            + str(printer_temps[key]["actual"])
-                            + unichr(176)
-                            + "C/"
-                            + str(printer_temps[key]["target"])
-                            + unichr(176)
-                            + "C"
-                        )
+                        if shared_nozzle and nozzle_number and nozzle_number != '0':
+                            # only show the first nozzle if they are 'shared'
+                            self._logger.debug("Skipping nozzle {} because it is shared.".format(nozzle_number))
+                        else:
+
+                            if len(printer_temps) > 2:
+                                nozzle_name += key[4:]
+
+                            temp_str += (
+                                ", "
+                                + nozzle_name
+                                + ": "
+                                + str(printer_temps[key]["actual"])
+                                + unichr(176)
+                                + "C/"
+                                + str(printer_temps[key]["target"])
+                                + unichr(176)
+                                + "C"
+                            )
 
             footer = "Printer: " + printer_text + temp_str + z_height_str
 
