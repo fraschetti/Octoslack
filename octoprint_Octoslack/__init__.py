@@ -993,13 +993,19 @@ class OctoslackPlugin(
                         )
                     elif key.startswith("tool"):
                         nozzle_name = "Nozzle"
-                        printer_profile = self._printer_profile_manager.get_current_or_default()
+                        printer_profile = (
+                            self._printer_profile_manager.get_current_or_default()
+                        )
                         shared_nozzle = printer_profile["extruder"]["sharedNozzle"]
                         nozzle_number = key[4:]
 
-                        if shared_nozzle and nozzle_number and nozzle_number != '0':
+                        if shared_nozzle and nozzle_number and nozzle_number != "0":
                             # only show the first nozzle if they are 'shared'
-                            self._logger.debug("Skipping nozzle {} because it is shared.".format(nozzle_number))
+                            self._logger.debug(
+                                "Skipping nozzle {} because it is shared.".format(
+                                    nozzle_number
+                                )
+                            )
                         else:
 
                             if len(printer_temps) > 2:
@@ -1596,24 +1602,30 @@ class OctoslackPlugin(
 
         tz_config = self._settings.get(["timezone"], merged=True)
 
-        local_eta = datetime.datetime.now() + datetime.timedelta(seconds=seconds)
+        local_now = datetime.datetime.now()
+        local_eta = local_now + datetime.timedelta(seconds=seconds)
 
         ##Return local OS timestamp
         if not tz_config or tz_config == "OS_Default":
             eta = local_eta
+            now = local_now
         else:
             ##Generate TZ adjusted timestamp
             tz = pytz.timezone(tz_config)
             utc_time = datetime.datetime.utcnow().replace(tzinfo=pytz.utc)
-            eta = utc_time.astimezone(tz) + datetime.timedelta(seconds=seconds)
+            now = utc_time.astimezone(tz)
+            eta = now + datetime.timedelta(seconds=seconds)
 
         ##Config UI string, not an actual python date/time format string
         selected_date_format = self._settings.get(["eta_date_format"], merged=True)
 
         if selected_date_format == "HH:mm <fuzzy date>":
-            return "%s %s" % (eta.strftime("%H:%M"), humanize.naturalday(local_eta))
+            return "%s %s" % (eta.strftime("%H:%M"), self.humanize_day_delta(now, eta))
         elif selected_date_format == "hh:mm tt <fuzzy date>":
-            return "%s %s" % (eta.strftime("%I:%M %p"), humanize.naturalday(local_eta))
+            return "%s %s" % (
+                eta.strftime("%I:%M %p"),
+                self.humanize_day_delta(now, eta),
+            )
         elif selected_date_format == "MM/dd/yyyy HH:mm":
             return eta.strftime("%m/%d/%Y %H:%M")
         elif selected_date_format == "dd/MM/yyyy HH:mm":
@@ -1624,6 +1636,21 @@ class OctoslackPlugin(
             return eta.strftime("%d/%m/%Y %I:%M %p")
         else:
             return eta.strftime("%Y-%m-%d %H:%M")
+
+    def humanize_day_delta(self, now, eta):
+        new_now = datetime.date(now.year, now.month, now.day)
+        new_eta = datetime.date(eta.year, eta.month, eta.day)
+
+        delta_days = (new_eta - new_now).days
+
+        if delta_days == -1:
+            return "yesterday"
+        elif delta_days == 0:
+            return "today"
+        elif delta_days == 1:
+            return "tomorrow"
+        else:
+            return eta.strftime("%b %d")
 
     def format_duration(self, seconds):
         time_format = self._settings.get(["time_format"], merged=True)
