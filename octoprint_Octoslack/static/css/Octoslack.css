@@ -40,6 +40,12 @@
 .octoslack_indented {
     margin-left: 40px;
 }
+.octoslack_checkbox_margin_override {
+    margin: 0px 2px 0px 0px !important;
+}
+.octoslack_row_bottom_padding {
+    padding-bottom: 10px;
+}
 .octoslack_small_grid_cell {
     border: 1px solid #999;
     padding-left: 6px;

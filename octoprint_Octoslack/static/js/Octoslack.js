@@ -708,11 +708,22 @@ var Octoslack = {
         var urlsTable = "<table id='snapshot_urls_table'>";
         for (var i = 0; i < snapshot_urls.length; i++) {
 	    var decoded = decodeURIComponent(snapshot_urls[i]);
-            var urlRow = this.createURLRowHTML(decoded, "Remove", "Octoslack.removeURLRow(event, this); return false;");
+	    var parts = decoded.split('|');
+	    var snapshotUrl = parts[0];
+	    var snapshotFlipH = false;
+	    var snapshotFlipV = false;
+	    var snapshotRotate90 = false;
+	    if(parts.length == 4) {
+                snapshotFlipH = parts[1] === 'true';
+		snapshotFlipV = parts[2] === 'true';
+		snapshotRotate90 = parts[3] === 'true';
+            }
+            var urlRow = this.createURLRowHTML(snapshotUrl, snapshotFlipH, snapshotFlipV, snapshotRotate90,
+                "Remove", "Octoslack.removeURLRow(event, this); return false;");
             urlsTable += urlRow;
         }
 
-        var addRow = this.createURLRowHTML(null, "Add URL", "Octoslack.addBlankURLRow(event, this); return false;");
+        var addRow = this.createURLRowHTML(null, false, false, false, "Add URL", "Octoslack.addBlankURLRow(event, this); return false;");
         urlsTable += addRow;
 
         urlsTable += "</table>";
@@ -730,20 +741,42 @@ var Octoslack = {
         var newRow = document.createElement('tr');
         tableElem.insertBefore(newRow, rowElem);
 
-        newRow.outerHTML = this.createURLRowHTML("", "Remove", "Octoslack.removeURLRow(event, this); return false;");
+        newRow.outerHTML = this.createURLRowHTML("", false, false, false, "Remove", "Octoslack.removeURLRow(event, this); return false;");
     },
 
-    createURLRowHTML : function(url, action_text, action_handler) {
+    createURLRowHTML : function(url, flipH, flipV, rotate90, action_text, action_handler) {
         var tableRow = "<tr>";
-        tableRow += "<td>";
+        tableRow += "<td class='octoslack_row_bottom_padding'>";
 
         //TODO we're lazily updating the list on every change (quick and dirty solution)
-        if(url == null)
+        if(url == null) {
             tableRow += "&nbsp;";
-        else
+	}
+        else {
             tableRow += "<input type='text' class='octoslack_width_auto' size='60' oninput='Octoslack.storeSnapshotURLs();' onchange='Octoslack.storeSnapshotURLs();' value='" + this.escapeHtml(url) + "'>";
+            tableRow += "<br/>";
+
+	    tableRow += "<input type='checkbox' class='octoslack_checkbox_margin_override' "
+		+ " oninput='Octoslack.storeSnapshotURLs();' onchange='Octoslack.storeSnapshotURLs();' "
+                + (flipH ? " checked " : " ")
+                + ">Flip horizontally</input>";
+
+            tableRow += "&nbsp;&nbsp;"
+
+	    tableRow += "<input type='checkbox' class='octoslack_checkbox_margin_override' "
+		+ " oninput='Octoslack.storeSnapshotURLs();' onchange='Octoslack.storeSnapshotURLs();' "
+                + (flipV ? " checked " : " ")
+                + ">Flip vertically</input>";
+
+            tableRow += "&nbsp;&nbsp;"
+
+	    tableRow += "<input type='checkbox' class='octoslack_checkbox_margin_override' "
+		+ " oninput='Octoslack.storeSnapshotURLs();' onchange='Octoslack.storeSnapshotURLs();' "
+                + (rotate90 ? " checked " : " ")
+                + ">Rotate 90 degrees counter clockwise</input>";
+	}
         tableRow += "</td>";
-        tableRow += "<td style='width: 100px;'><button onclick='" + action_handler + "'>" + this.escapeHtml(action_text) + "</button></td>";
+        tableRow += "<td valign='top' style='width: 100px;' class='octoslack_row_bottom_padding'><button onclick='" + action_handler + "'>" + this.escapeHtml(action_text) + "</button></td>";
         tableRow += "</tr>";
 
         return tableRow;
@@ -758,24 +791,37 @@ var Octoslack = {
     },
 
     storeSnapshotURLs : function() {
+
         var urls = [];
 
         var urlsTable = $("#snapshot_urls_table")[0];
 
         for (var i = 0, row; row = urlsTable.rows[i]; i++) {
             var cell = row.cells[0];
-            var input = cell.firstChild;
-            if(input == null)
-		continue;
 
-            if(input.nodeName.toLowerCase() == "input") {
-                var url = input.value;
-                if(url == null) continue;
+	    var snapshotUrl = null;
+	    var snapshotFlipH = false;
+	    var snapshotFlipV = false;
+	    var snapshotRotate90 = false;
 
-                url = url.trim();
-                if(url.length > 0)
-                    urls.push(encodeURIComponent(url));
-            }
+	    for (var j = 0, childElem; childElem = cell.children[j]; j++) {
+		var nodename = childElem.nodeName.toLowerCase();
+                if(j == 0 && nodename == "input") {
+	            snapshotUrl = childElem.value;
+		} else if(j == 2 && nodename == "input") {
+                    snapshotFlipH = childElem.checked;
+		} else if(j == 3 && nodename == "input") {
+                    snapshotFlipV = childElem.checked;
+		} else if(j == 4 && nodename == "input") {
+                    snapshotRotate90 = childElem.checked;
+		}
+	    }
+
+	    if(snapshotUrl == null || snapshotUrl.trim().length == 0)
+	        continue;
+
+	    var combinedstr = snapshotUrl + "|" + snapshotFlipH + "|" + snapshotFlipV + "|" + snapshotRotate90;
+	    urls.push(encodeURIComponent(combinedstr));
         }
 
 	var combined_str = urls.join(",");

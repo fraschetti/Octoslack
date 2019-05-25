@@ -2514,10 +2514,26 @@ class OctoslackPlugin(
             ["additional_snapshot_urls"], merged=True
         )
         if not additional_snapshot_urls == None:
-            for url in additional_snapshot_urls.split(","):
-                url = url.strip()
+            for entry in additional_snapshot_urls.split(","):
+                entry = entry.strip()
+                if len(entry) == 0:
+                    continue
+
+                entry = urllib2.unquote(entry)
+
+                parts = entry.split("|")
+                url = parts[0].strip()
+                flipH = False
+                flipV = False
+                rotate90 = False
+
+                if len(parts) == 4:
+                    flipH = parts[1].strip() == "true"
+                    flipV = parts[2].strip() == "true"
+                    rotate90 = parts[3].strip() == "true"
+
                 if len(url) > 0:
-                    urls.append((urllib2.unquote(url), False, False, False))
+                    urls.append((url, flipH, flipV, rotate90))
 
         self._logger.debug("Snapshot URLs: " + str(urls))
 
@@ -2668,6 +2684,15 @@ class OctoslackPlugin(
                 self._logger.debug(
                     "Saving transposed image for URL: " + url + " to " + temp_filename
                 )
+
+                if tmp_img.mode in ("RGBA", "LA"):
+                    self._logger.debug(
+                        "Converting transposed image to RGB from: " + str(tmp_img.mode)
+                    )
+                    rgb_img = Image.new("RGB", tmp_img.size, (0, 0, 0))
+                    rgb_img.paste(tmp_img, mask=tmp_img.split()[3])
+                    tmp_img = rgb_img
+
                 tmp_img.save(temp_filename, "JPEG")
 
             responses[rsp_idx] = (temp_filename, None)
