@@ -54,6 +54,8 @@ var Octoslack = {
         this.changeImgurClientID();
         $("#octoslack_imgur_refresh_token").bind('input propertychange', function() { Octoslack.changeImgurRefreshToken(); });
         $("#octoslack_imgur_album_id").bind('input propertychange', function() { Octoslack.changeImgurAlbumID(); });
+
+        this.changeConnectionType();
     },
 
     setInitialInputStates : function() {
@@ -157,11 +159,10 @@ var Octoslack = {
     },
 
     afterSettingsSaved : function() {
-	
 	var new_connection_method = $("#octoslack_connection_method_hidden").val();
 	var new_channel = $("#octoslack_channel").val();
 
-	if(new_connection_method == "APITOKEN" && new_channel.trim().length ==0) {
+	if(new_connection_method == "APITOKEN" && new_channel.trim().length == 0) {
 		var title = "Required Octoslack field not populated";
 		var text = "When using the API Token for Slack connectivity, a Slack channel must be provided";
 		var message = $("<p></p>")
@@ -199,7 +200,36 @@ var Octoslack = {
 	}
     },
 
+    allow_slack_msg_attrs : function() {
+	var connection_method = $("#octoslack_connection_method_hidden").val();
+	switch(connection_method) {
+	    case "APITOKEN":
+	    case "WEBHOOK":
+	        return true;
+	}
+
+	return false;
+    },
+
+    allow_pushover_msg_attrs : function() {
+	var connection_method = $("#octoslack_connection_method_hidden").val();
+	return connection_method == "PUSHOVER";
+    },
+
     changeConnectionType : function(new_type) {
+        if (new_type === undefined)
+            new_type = $("#octoslack_connection_method_hidden").val();
+
+        var slack_config_section = $("#octoslack_slack_config_section");
+        var pushbullet_config_section = $("#octoslack_pushbullet_config_section");
+        var pushover_config_section = $("#octoslack_pushover_config_section");
+        var rocketchat_config_section = $("#octoslack_rocketchat_config_section");
+
+        slack_config_section.attr("class", "octoslack_hidden");
+        pushbullet_config_section.attr("class", "octoslack_hidden"); 
+        pushover_config_section.attr("class", "octoslack_hidden"); 
+        rocketchat_config_section.attr("class", "octoslack_hidden"); 
+
         var mattermost_enabled = $("#octoslack_mattermost_compatabilty_mode").is(":checked");
 	if(mattermost_enabled)
 		new_type = "WEBHOOK";
@@ -208,21 +238,58 @@ var Octoslack = {
         var apiTokenGroup = $("#octoslack_apitoken_group");
         var webhookGroup = $("#octolack_webhook_group");
 
+	var slackUploadOption = $("#octoslackSlackUploadMethod");
+	var pushbulletUploadOption = $("#octoslackPushbulletUploadMethod");
+	var pushoverUploadOption = $("#octoslackPushoverUploadMethod");
+	var rocketChatUploadOption = $("#octoslackRocketChatUploadMethod");
+
         apiTokenGroup.attr("class", "octoslack_hidden");
         webhookGroup.attr("class", "octoslack_hidden");
 
+        slackUploadOption.attr("class", "octoslack_hidden"); 
+        pushbulletUploadOption.attr("class", "octoslack_hidden"); 
+        pushoverUploadOption.attr("class", "octoslack_hidden"); 
+        rocketChatUploadOption.attr("class", "octoslack_hidden"); 
+
+
         switch (new_type) {
             case "APITOKEN":
+                slack_config_section.attr("class", "octoslack_visible");
                 apiTokenGroup.attr("class", "octoslack_visible");
+                slackUploadOption.attr("class", "octoslack_visible");
                 break;
            case "WEBHOOK":
-                 webhookGroup.attr("class", "octoslack_visible");
-                 break;
+                slack_config_section.attr("class", "octoslack_visible");
+                webhookGroup.attr("class", "octoslack_visible");
+                break;
+           case "PUSHBULLET":
+                pushbullet_config_section.attr("class", "octoslack_visible");
+                pushbulletUploadOption.attr("class", "octoslack_visible");
+                break;
+           case "PUSHOVER":
+                pushover_config_section.attr("class", "octoslack_visible");
+                pushoverUploadOption.attr("class", "octoslack_visible");
+                break;
+           case "ROCKETCHAT":
+                rocketchat_config_section.attr("class", "octoslack_visible");
+                rocketChatUploadOption.attr("class", "octoslack_visible");
+                break;
         }
 
         var connection_method_hidden = $("#octoslack_connection_method_hidden");
         connection_method_hidden.val(new_type);
         connection_method_hidden.trigger('change');
+
+	//Not all services support all config items
+	var allow_slack_attrs = Octoslack.allow_slack_msg_attrs();
+	$( "div[octoslack_msg_slack]" ).each(function() {
+	    $(this).attr("class", allow_slack_attrs ? "octoprint_config_row octoslack_visible" : "octoprint_config_row octoslack_hidden");
+	});
+
+	var allow_pushover_attrs = Octoslack.allow_pushover_msg_attrs();
+	$( "div[octoslack_msg_pushover]" ).each(function() {
+	    $(this).attr("class", allow_pushover_attrs ? "octoprint_config_row octoslack_visible" : "octoprint_config_row octoslack_hidden");
+	});
     },
 
     toggleUseSlackIdentity : function(checkbox) {
@@ -252,6 +319,12 @@ var Octoslack = {
                 minioGroup.attr("class", "octoslack_visible");
                 break;
             case "SLACK":
+                break;
+            case "PUSHBULLET":
+                break;
+            case "PUSHOVER":
+                break;
+            case "ROCKETCHAT":
                 break;
         }
 
@@ -425,6 +498,39 @@ var Octoslack = {
         if(events == null || events == undefined)
             events = [];
 
+        var pushoversounds = [
+		["pushover", "Pushover (default)"],
+		["bike", "Bike"],
+		["bugle", "Bugle"],
+		["cashregister", "Cash Register"],
+		["classical", "Classical"],
+		["cosmic", "Cosmic"],
+		["falling", "Falling"],
+		["gamelan", "Gamelan"],
+		["incoming", "Incoming"],
+		["intermission", "Intermission"],
+		["magic", "Magic"],
+		["mechanical", "Mechanical"],
+		["pianobar", "Piano Bar"],
+		["siren", "Siren"],
+		["spacealarm", "Space Alarm"],
+		["tugboat", "Tug Boat"],
+		["alien", "Alien Alarm (long)"],
+		["climb", "Climb (long)"],
+		["persistent", "Persistent (long)"],
+		["echo", "Pushover Echo (long)"],
+		["updown", "Up Down (long)"],
+		["none", "None (silent)"]
+        ];
+
+        var pushoverpriorities = [
+		["-2", "Lowest Priority"],
+		["-1", "Low Priority"],
+		["0", "Normal Priority"],
+		["1", "High Priority"],
+		["2", "Emergency Priority"]
+        ];
+
 	for(var i = 0; i < events.length; i++) {
 	    var event = events[i];
 
@@ -434,6 +540,8 @@ var Octoslack = {
             var customCaptureSnapshot = false;
             var customMessage = "";
             var customFallback = "";
+            var customPushoverSound = ""
+	    var customPushoverPriority = ""
 
             if(eventType == "STANDARD") {
                 useDataBind = true;
@@ -454,17 +562,31 @@ var Octoslack = {
                 customChannelOverride = event.ChannelOverride;
                 customCaptureSnapshot = event.CaptureSnapshot;
                 customMessage = event.Message;
+
                 customFallback = event.Fallback;
+                if(customFallback === undefined)
+                    customFallback = '';
+
+                customPushoverSound = event.PushoverSound;
+		if(customPushoverSound === undefined)
+                    customPushoverSound = '';
+		else
+                    customPushoverSound = customPushoverSound.trim();
+
+		customPushoverPriority = event.PushoverPriority;
+		if(customPushoverPriority=== undefined)
+                    customPushoverPriority = '';
+		else
+                    customPushoverPoriority = customPushoverPriority.trim();
 
                 if(gcode == undefined)
                     gcode = "";
 	        eventHtml.push("        <h3><span id='octoslack_event_" + internalName + "_gcode_title'>" + this.buildGcodeEventTitle(gcode, gcodeType) + "</span></h3>");
-
             }
 
             //Enabled
 	    eventHtml.push("        <div class='octoprint_config_row'>");
-	    eventHtml.push("            <input type='checkbox' class='octoslack_valign' id='octoslack_event_" + internalName + "_enabled' "
+	    eventHtml.push("            <input type='checkbox' class='octoslack_valign octoslack_checkbox_margin_override' id='octoslack_event_" + internalName + "_enabled' "
                 + (useDataBind ? "data-bind='checked: settings.plugins.Octoslack.supported_events." + internalName + ".Enabled'" : "")
                 + (customEnabled ? " checked " : " ")
                 + ">");
@@ -521,7 +643,7 @@ var Octoslack = {
 	        eventHtml.push("        </div>");
 
                 //Color
-	        eventHtml.push("        <div class='octoprint_config_row'>");
+	        eventHtml.push("        <div class='octoprint_config_row' octoslack_msg_slack>");
 	        eventHtml.push("            <select class='octoslack_select' id='octoslack_event_" + internalName + "_color'>");
 	        eventHtml.push("                <option value='good'" + (customColor == 'good' ? ' selected' : '') + ">OK</option>");
 	        eventHtml.push("                <option value='warning'" + (customColor == 'warning' ? ' selected' : '') + ">Warning</option>");
@@ -636,7 +758,7 @@ var Octoslack = {
 
             //CaptureSnapshot
 	    eventHtml.push("        <div class='octoprint_config_row'>");
-	    eventHtml.push("            <input type='checkbox' class='octoslack_valign' id='octoslack_event_" + internalName + "_snapshot' "
+	    eventHtml.push("            <input type='checkbox' class='octoslack_valign octoslack_checkbox_margin_override' id='octoslack_event_" + internalName + "_snapshot' "
                 + (useDataBind ? "data-bind='checked: settings.plugins.Octoslack.supported_events." + internalName + ".CaptureSnapshot'" : "")
                 + (customCaptureSnapshot ? " checked " : " ")
                 + ">");
@@ -646,7 +768,7 @@ var Octoslack = {
             if(eventType == "STANDARD" && internalName == "MovieDone") {
                 //UploadMovie
 	        eventHtml.push("        <div class='octoprint_config_row'>");
-	        eventHtml.push("            <input type='checkbox' class='octoslack_valign' id='octoslack_event_" + internalName + "_uploadmovie' "
+	        eventHtml.push("            <input type='checkbox' class='octoslack_valign octoslack_checkbox_margin_override' id='octoslack_event_" + internalName + "_uploadmovie' "
                     + (useDataBind ? "data-bind='checked: settings.plugins.Octoslack.supported_events." + internalName + ".UploadMovie'" : "")
                     + ">");
 	        eventHtml.push("            <div class='octoslack_label octoslack_action_label' onclick=\"$('#octoslack_event_" + internalName + "_uploadmovie').trigger('click')\">Upload timelapse</div>");
@@ -660,7 +782,7 @@ var Octoslack = {
 
                 //UploadedMovieLink
 	        eventHtml.push("        <div class='octoprint_config_row'>");
-	        eventHtml.push("            <input type='checkbox' class='octoslack_valign' id='octoslack_event_" + internalName + "_uploadmovielink' "
+	        eventHtml.push("            <input type='checkbox' class='octoslack_valign octoslack_checkbox_margin_override' id='octoslack_event_" + internalName + "_uploadmovielink' "
                     + (useDataBind ? "data-bind='checked: settings.plugins.Octoslack.supported_events." + internalName + ".UploadMovieLink'" : "")
                     + ">");
 	        eventHtml.push("            <div class='octoslack_label octoslack_action_label' onclick=\"$('#octoslack_event_" + internalName + "_uploadmovielink').trigger('click')\">Include uploaded timelapse URL</div>");
@@ -682,16 +804,60 @@ var Octoslack = {
 	    eventHtml.push("            <div class='octoslack_label octoslack_action_label'>Message</div>");
 	    eventHtml.push("        </div>");
 
-
-            //Fallback
-	    eventHtml.push("        <div class='octoprint_config_row'>");
+	    //Fallback
+	    eventHtml.push("        <div class='octoprint_config_row' octoslack_msg_slack>");
 	    eventHtml.push("            <textarea class='octoslack_width_auto' rows='2' cols='60' id='octoslack_event_" + internalName + "_fallback' " 
                 + (useDataBind ? "data-bind='textInput: settings.plugins.Octoslack.supported_events." + internalName + ".Fallback'" : "")
                 + ">"
-                + (customFallback.trim().length > 0 ? this.escapeHtml(customFallback.trim()) : "")
-                + "</textarea>");
+	        + (customFallback.trim().length > 0 ? this.escapeHtml(customFallback.trim()) : "")
+	        + "</textarea>");
 	    eventHtml.push("            <div class='octoslack_label octoslack_action_label'>Fallback</div>");
 	    eventHtml.push("        </div>");
+
+            //PushoverSound
+	    eventHtml.push("        <div class='octoprint_config_row' octoslack_msg_pushover>");
+            eventHtml.push("            <select class='octoslack_select' id='octoslack_event_" + internalName + "_PushoverSound' "
+                 + (useDataBind ? "data-bind='value: settings.plugins.Octoslack.supported_events." + internalName + ".PushoverSound'" : "")
+                 + ">");
+
+            var pushoversounds_len = pushoversounds.length;
+            for (var sounds_idx = 0; sounds_idx < pushoversounds_len; sounds_idx++) {
+                var sound_arr = pushoversounds[sounds_idx];
+                var sound_var = sound_arr[0].trim();
+                var sound_name = sound_arr[1].trim();
+
+                eventHtml.push("                <option value='");
+                eventHtml.push(sound_var);
+		eventHtml.push("' " + (useDataBind ? "" : (customPushoverSound == sound_var || (sound_var == "pushover" && customPushoverSound == '') ? "selected" : "")));
+                eventHtml.push(">" + sound_name + "</option>");
+	    }
+
+            eventHtml.push("            </select>");
+	    eventHtml.push("            <div class='octoslack_label octoslack_action_label'>Pushover Sound</div>");
+	    eventHtml.push("        </div>");
+
+            //PushoverPriority
+	    eventHtml.push("        <div class='octoprint_config_row' octoslack_msg_pushover>");
+            eventHtml.push("            <select class='octoslack_select' id='octoslack_event_" + internalName + "_PushoverPriority' "
+                 + (useDataBind ? "data-bind='value: settings.plugins.Octoslack.supported_events." + internalName + ".PushoverPriority'" : "")
+                 + ">");
+
+            var pushoverpriorities_len = pushoverpriorities.length;
+            for (var priorities_idx = 0; priorities_idx < pushoverpriorities_len; priorities_idx++) {
+                var priority_arr = pushoverpriorities[priorities_idx];
+                var priority_var = priority_arr[0].trim();
+                var priority_name = priority_arr[1].trim();
+
+                eventHtml.push("                <option value='");
+                eventHtml.push(priority_var);
+		eventHtml.push("' " + (useDataBind ? "" : (customPushoverPriority == priority_var || (priority_var == "0" && customPushoverPriority == '') ? "selected" : "")));
+                eventHtml.push(">" + priority_name + "</option>");
+	    }
+
+            eventHtml.push("            </select>");
+	    eventHtml.push("            <div class='octoslack_label octoslack_action_label'>Pushover Priority</div>");
+	    eventHtml.push("        </div>");
+
 
             if(action_text != null && action_handler != null)
                 eventHtml.push("        <div class='octoslack_align_right' style='width: 100%;'><button onclick='" + action_handler + "'>" + this.escapeHtml(action_text) + "</button></div>");
@@ -855,12 +1021,16 @@ var Octoslack = {
                   "ChannelOverride" : "", 
                   "CaptureSnapshot" : true, 
                   "Message" : "", 
-                  "Fallback" : ""
+                  "Fallback" : "",
+                  "PushoverSound" : "",
+                  "PushoverPriority" : ""
                 },
 	];
 
         var new_event_html = this.buildOctoPrintEventConfigRow('GCODE', empty_event, "Remove", "Octoslack.removeGcodeEventRow(event, this); return false");
         gcode_events_container.append(new_event_html);
+
+        this.changeConnectionType();
     },
 
     createGcodeEventRowHTML : function(url, action_text, action_handler) {
@@ -909,7 +1079,9 @@ var Octoslack = {
             var snapshot = $("#octoslack_event_" + internalName + "_snapshot").is(':checked');
             var message = $("#octoslack_event_" + internalName + "_message").val();
             var fallback = $("#octoslack_event_" + internalName + "_fallback").val();
-
+            var pushoverSound = $("#octoslack_event_" + internalName + "_PushoverSound").val().trim();
+            var pushoverPriority = $("#octoslack_event_" + internalName + "_PushoverPriority").val().trim();
+	
             gcode_events.push({ "InternalName" : internalName, 
                                   "Gcode" : gcode, 
                                   "GcodeMatchType" : gcodematchtype, 
@@ -919,7 +1091,9 @@ var Octoslack = {
                                   "ChannelOverride" : channeloverride, 
                                   "CaptureSnapshot" : snapshot, 
                                   "Message" : message, 
-                                  "Fallback" : fallback
+                                  "Fallback" : fallback,
+                                  "PushoverSound" : pushoverSound,
+                                  "PushoverPriority" : pushoverPriority,
                                 });
         });
 

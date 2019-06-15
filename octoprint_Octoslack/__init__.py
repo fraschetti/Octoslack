@@ -7,6 +7,9 @@ from slackclient import SlackClient
 from slacker import Slacker, IncomingWebhook
 from imgurpython import ImgurClient
 from imgurpython.helpers.error import ImgurClientError, ImgurClientRateLimitError
+from pushbullet import Pushbullet
+from pushover_complete import PushoverAPI
+from rocketchat.api import RocketChatAPI
 from PIL import Image
 from octoprint.util import RepeatedTimer
 from websocket import WebSocketConnectionClosedException
@@ -53,14 +56,16 @@ class OctoslackPlugin(
     ##TODO FEATURE - Add support for Imgur image title + description
     ##TODO FEATURE - Optionally upload timelapse video to youtube & send a Slack message when the upload is complete
     ##TODO FEATURE - Define a third set of messages for each event to allow sending M117 commands to the printer
-    ##TODO ENHANCEMENT - The progress event fires on gcode uploads and triggers Octoslack events. That needs to be fixed.
+    ##TODO ENHANCEMENT - The progress event fires on gcode uploads and triggers Octoslack events. Test and fix if necessary.
     ##TODO ENHANCEMENT - Consider extending the progress snapshot minimum interval beyond Slack to other providers
+    ##TODO ENHANCEMENT - Add Persoanl Token, emoji, avatar, and other formatting enhancements to Rocket.API once a library supports them (or update the libs yourself)
+    ##TODO We've certainly moved past "it's time to refactor" line. Both the UI/JS/Python code need to be refactored
 
     ##~~ SettingsPlugin mixin
 
     def get_settings_defaults(self):
         return {
-            "connection_method": "APITOKEN",  ##APITOKEN or WEBHOOK
+            "connection_method": "APITOKEN",  ##APITOKEN, WEBHOOK, PUSHBULLET, PUSHOVER, ROCKETCHAT
             "slack_apitoken_config": {
                 "api_token": "",
                 "enable_commands": True,
@@ -76,6 +81,14 @@ class OctoslackPlugin(
                 "username": "",
             },
             "channel": "",
+            "pushbullet_config": {"access_token": "", "channel": ""},
+            "pushover_config": {"app_token": "", "user_key": ""},
+            "rocketchat_config": {
+                "server_url": "",
+                "username": "",
+                "password": "",
+                "channel": "",
+            },
             "ignore_cancel_fail_event": True,
             "mattermost_compatability_mode": False,
             "include_raspi_temp": True,
@@ -119,6 +132,8 @@ class OctoslackPlugin(
                     "ReportFinalPrintTime": False,
                     "ReportMovieStatus": False,
                     "IncludeSupportedCommands": True,
+                    "PushoverSound": "pushover",
+                    "PushoverPriority": 0,
                 },
                 "Startup": {
                     "Enabled": False,
@@ -133,6 +148,8 @@ class OctoslackPlugin(
                     "ReportJobProgress": False,
                     "ReportFinalPrintTime": False,
                     "ReportMovieStatus": False,
+                    "PushoverSound": "pushover",
+                    "PushoverPriority": 0,
                 },
                 "Shutdown": {
                     "Enabled": False,
@@ -147,6 +164,8 @@ class OctoslackPlugin(
                     "ReportJobProgress": False,
                     "ReportFinalPrintTime": False,
                     "ReportMovieStatus": False,
+                    "PushoverSound": "pushover",
+                    "PushoverPriority": 0,
                 },
                 "Connecting": {
                     "Enabled": False,
@@ -161,6 +180,8 @@ class OctoslackPlugin(
                     "ReportJobProgress": False,
                     "ReportFinalPrintTime": False,
                     "ReportMovieStatus": False,
+                    "PushoverSound": "pushover",
+                    "PushoverPriority": 0,
                 },
                 "Connected": {
                     "Enabled": False,
@@ -175,6 +196,8 @@ class OctoslackPlugin(
                     "ReportJobProgress": False,
                     "ReportFinalPrintTime": False,
                     "ReportMovieStatus": False,
+                    "PushoverSound": "pushover",
+                    "PushoverPriority": 0,
                 },
                 "Disconnecting": {
                     "Enabled": False,
@@ -189,6 +212,8 @@ class OctoslackPlugin(
                     "ReportJobProgress": False,
                     "ReportFinalPrintTime": False,
                     "ReportMovieStatus": False,
+                    "PushoverSound": "pushover",
+                    "PushoverPriority": 0,
                 },
                 "Disconnected": {
                     "Enabled": False,
@@ -203,6 +228,8 @@ class OctoslackPlugin(
                     "ReportJobProgress": False,
                     "ReportFinalPrintTime": False,
                     "ReportMovieStatus": False,
+                    "PushoverSound": "pushover",
+                    "PushoverPriority": 0,
                 },
                 "Error": {
                     "Enabled": True,
@@ -217,6 +244,8 @@ class OctoslackPlugin(
                     "ReportJobProgress": False,
                     "ReportFinalPrintTime": False,
                     "ReportMovieStatus": False,
+                    "PushoverSound": "pushover",
+                    "PushoverPriority": 0,
                 },
                 "PrintStarted": {
                     "Enabled": True,
@@ -231,6 +260,8 @@ class OctoslackPlugin(
                     "ReportJobProgress": False,
                     "ReportFinalPrintTime": False,
                     "ReportMovieStatus": False,
+                    "PushoverSound": "pushover",
+                    "PushoverPriority": 0,
                 },
                 "PrintFailed": {
                     "Enabled": True,
@@ -245,6 +276,8 @@ class OctoslackPlugin(
                     "ReportJobProgress": False,
                     "ReportFinalPrintTime": False,
                     "ReportMovieStatus": False,
+                    "PushoverSound": "pushover",
+                    "PushoverPriority": 0,
                 },
                 "PrintCancelled": {
                     "Enabled": True,
@@ -259,6 +292,8 @@ class OctoslackPlugin(
                     "ReportJobProgress": False,
                     "ReportFinalPrintTime": False,
                     "ReportMovieStatus": False,
+                    "PushoverSound": "pushover",
+                    "PushoverPriority": 0,
                 },
                 "PrintDone": {
                     "Enabled": True,
@@ -273,6 +308,8 @@ class OctoslackPlugin(
                     "ReportJobProgress": False,
                     "ReportFinalPrintTime": True,
                     "ReportMovieStatus": False,
+                    "PushoverSound": "pushover",
+                    "PushoverPriority": 0,
                 },
                 ##Not a real event but we'll leverage the same config structure
                 "Progress": {
@@ -293,6 +330,8 @@ class OctoslackPlugin(
                     "IntervalPct": 25,
                     "IntervalHeight": 0,
                     "IntervalTime": 0,
+                    "PushoverSound": "pushover",
+                    "PushoverPriority": 0,
                 },
                 ##Not a real event but we'll leverage the same config structure
                 "GcodeEvent": {
@@ -307,6 +346,8 @@ class OctoslackPlugin(
                     "ReportJobOrigEstimate": False,
                     "ReportJobProgress": True,
                     "ReportMovieStatus": False,
+                    "PushoverSound": "pushover",
+                    "PushoverPriority": 0,
                 },
                 ##Not a real event but we'll leverage the same config structure
                 "Heartbeat": {
@@ -322,6 +363,8 @@ class OctoslackPlugin(
                     "ReportJobProgress": False,
                     "ReportMovieStatus": False,
                     "IntervalTime": 60,
+                    "PushoverSound": "pushover",
+                    "PushoverPriority": 0,
                 },
                 "PrintPaused": {
                     "Enabled": True,
@@ -335,6 +378,8 @@ class OctoslackPlugin(
                     "ReportJobOrigEstimate": True,
                     "ReportJobProgress": True,
                     "ReportMovieStatus": False,
+                    "PushoverSound": "pushover",
+                    "PushoverPriority": 0,
                 },
                 "PrintResumed": {
                     "Enabled": True,
@@ -348,6 +393,8 @@ class OctoslackPlugin(
                     "ReportJobOrigEstimate": True,
                     "ReportJobProgress": True,
                     "ReportMovieStatus": False,
+                    "PushoverSound": "pushover",
+                    "PushoverPriority": 0,
                 },
                 "MovieRendering": {
                     "Enabled": False,
@@ -361,6 +408,8 @@ class OctoslackPlugin(
                     "ReportJobOrigEstimate": False,
                     "ReportJobProgress": False,
                     "ReportMovieStatus": True,
+                    "PushoverSound": "pushover",
+                    "PushoverPriority": 0,
                 },
                 "MovieDone": {
                     "Enabled": False,
@@ -376,6 +425,8 @@ class OctoslackPlugin(
                     "ReportMovieStatus": True,
                     "UploadMovie": False,
                     "UploadMovieLink": False,
+                    "PushoverSound": "pushover",
+                    "PushoverPriority": 0,
                 },
                 "MovieFailed": {
                     "Enabled": False,
@@ -389,6 +440,8 @@ class OctoslackPlugin(
                     "ReportJobOrigEstimate": False,
                     "ReportJobProgress": False,
                     "ReportMovieStatus": True,
+                    "PushoverSound": "pushover",
+                    "PushoverPriority": 0,
                 },
             },
             "gcode_events": "",
@@ -402,6 +455,10 @@ class OctoslackPlugin(
             admin=[
                 ["slack_apitoken_config", "api_token"],
                 ["slack_webhook_config", "webhook_url"],
+                ["pushbullet_config", "access_token"],
+                ["pushover_config", "app_token"],
+                ["rocketchat_config", "username"],
+                ["rocketchat_config", "password"],
                 ["s3_config", "AWSAccessKey"],
                 ["s3_config", "AWSsecretKey"],
                 ["s3_config", "s3Bucket"],
@@ -473,9 +530,9 @@ class OctoslackPlugin(
         ##~~ StartupPlugin mixin
 
     def on_after_startup(self):
-        self._logger.debug("Starting Slack RTM client")
+        self._logger.debug("Entering Slack RTM client init logic")
         self.start_rtm_client()
-        self._logger.debug("Started Slack RTM client")
+        self._logger.debug("Exited Slack RTM client init logic")
 
         self.update_gcode_sent_listeners()
 
@@ -803,6 +860,9 @@ class OctoslackPlugin(
         reportMovieStatus = False
         reportFinalPrintTime = False
         includeSupportedCommands = False
+        bold_text_start, bold_text_end, name_val_sep, newline = (
+            self.get_formatting_elements()
+        )
 
         if (
             channel_override == None or len(channel_override.strip()) == 0
@@ -894,7 +954,7 @@ class OctoslackPlugin(
                 jobStateStr = file_name
 
             text_arr.append(
-                self.bold_text() + "File" + self.bold_text() + " " + jobStateStr
+                bold_text_start + "File" + bold_text_end + name_val_sep + jobStateStr
             )
 
         if reportJobOrigEstimate:
@@ -918,16 +978,20 @@ class OctoslackPlugin(
             replacement_params["{eta}"] = estimatedFinish
 
             text_arr.append(
-                self.bold_text()
+                bold_text_start
                 + "Estimated print time"
-                + self.bold_text()
-                + " "
+                + bold_text_end
+                + name_val_sep
                 + estimatedPrintTimeStr
             )
 
             if event != "PrintDone" and self._printer.is_printing():
                 text_arr.append(
-                    self.bold_text() + "ETA" + self.bold_text() + " " + estimatedFinish
+                    bold_text_start
+                    + "ETA"
+                    + bold_text_end
+                    + name_val_sep
+                    + estimatedFinish
                 )
 
         if event == "Progress" and "progress" in event_payload:
@@ -962,15 +1026,19 @@ class OctoslackPlugin(
 
         if reportJobProgress and not pct_complete == None:
             text_arr.append(
-                self.bold_text() + "Elapsed" + self.bold_text() + " " + elapsed_str
+                bold_text_start + "Elapsed" + bold_text_end + name_val_sep + elapsed_str
             )
             text_arr.append(
-                self.bold_text() + "Remaining" + self.bold_text() + " " + time_left_str
+                bold_text_start
+                + "Remaining"
+                + bold_text_end
+                + name_val_sep
+                + time_left_str
             )
 
             if self._printer.is_printing():
                 text_arr.append(
-                    self.bold_text() + "ETA" + self.bold_text() + " " + eta_str
+                    bold_text_start + "ETA" + bold_text_end + name_val_sep + eta_str
                 )
 
             ##Is rendered as a footer so it's safe to always include this
@@ -1060,10 +1128,10 @@ class OctoslackPlugin(
 
         if reportFinalPrintTime:
             text_arr.append(
-                self.bold_text()
+                bold_text_start
                 + "Final print time"
-                + self.bold_text()
-                + " "
+                + bold_text_end
+                + name_val_sep
                 + final_time
             )
 
@@ -1081,14 +1149,18 @@ class OctoslackPlugin(
 
             if not movie_name == None:
                 text_arr.append(
-                    self.bold_text() + "Movie" + self.bold_text() + " " + movie_name
+                    bold_text_start
+                    + "Movie"
+                    + bold_text_end
+                    + name_val_sep
+                    + movie_name
                 )
             if not print_filename == None:
                 text_arr.append(
-                    self.bold_text()
+                    bold_text_start
                     + "Print job"
-                    + self.bold_text()
-                    + " "
+                    + bold_text_end
+                    + name_val_sep
                     + print_filename
                 )
 
@@ -1098,34 +1170,25 @@ class OctoslackPlugin(
 
         if includeSupportedCommands:
             text_arr.append(
-                self.bold_text()
+                bold_text_start
                 + "help"
-                + self.bold_text()
+                + bold_text_end
                 + " - Displays this list of commands"
             )
             text_arr.append(
-                self.bold_text()
+                bold_text_start
                 + "status"
-                + self.bold_text()
+                + bold_text_end
                 + " - Display the current print job status"
             )
             text_arr.append(
-                self.bold_text()
-                + "stop"
-                + self.bold_text()
-                + " - Stop the current print"
+                bold_text_start + "stop" + bold_text_end + " - Stop the current print"
             )
             text_arr.append(
-                self.bold_text()
-                + "pause"
-                + self.bold_text()
-                + " - Pause the current print"
+                bold_text_start + "pause" + bold_text_end + " - Pause the current print"
             )
             text_arr.append(
-                self.bold_text()
-                + "resume"
-                + self.bold_text()
-                + " - Resume a paused print"
+                bold_text_start + "resume" + bold_text_end + " - Resume a paused print"
             )
 
         error = None
@@ -1134,11 +1197,13 @@ class OctoslackPlugin(
         if not error == None:
             error = error.strip()
         if not error == None and len(error) > 0:
-            text_arr.append(self.bold_text() + "Error" + self.bold_text() + " " + error)
+            text_arr.append(
+                bold_text_start + "Error" + bold_text_end + name_val_sep + error
+            )
             replacement_params["{error}"] = error
 
         if not text_arr == None and len(text_arr) > 0:
-            text = "\n".join(text_arr)
+            text = newline.join(text_arr)
 
         for param in replacement_params:
             if not fallback == None:
@@ -1166,6 +1231,7 @@ class OctoslackPlugin(
             target=self.send_slack_message,
             args=(
                 event,
+                event_settings,
                 event_payload,
                 channel_override,
                 fallback,
@@ -1207,8 +1273,9 @@ class OctoslackPlugin(
         ):
             return
 
-        connection_method = self._settings.get(["connection_method"], merged=True)
+        connection_method = self.connection_method()
         if connection_method == None or connection_method != "APITOKEN":
+            self._logger.debug("Slack RMM client not enabled")
             return
 
         slackAPIToken = self._settings.get(["slack_apitoken_config"], merged=True).get(
@@ -1585,14 +1652,25 @@ class OctoslackPlugin(
                 + str(e.message)
             )
 
+    def connection_method(self):
+        return self._settings.get(["connection_method"], merged=True)
+
     def mattermost_mode(self):
         return self._settings.get(["mattermost_compatability_mode"], merged=True)
 
-    def bold_text(self):
-        if self.mattermost_mode():
-            return "**"
-        else:
-            return "*"
+    def get_formatting_elements(self):
+        ##returns bold formatting str, key/value separator (often used when bold can't be used), newline
+        connection_method = self.connection_method()
+        if connection_method == "WEBHOOK" and self.mattermost_mode():
+            return "**", "**", " ", "\n"
+        elif connection_method == "WEBHOOK" or connection_method == "APITOKEN":
+            return "*", "**", " ", "\n"
+        elif connection_method == "PUSHOVER":
+            return "<b>", "</b>", " ", "\n"
+        elif connection_method == "ROCKETCHAT":
+            return "*", "*", " ", "\n"
+
+        return "", "", ": ", "\n"
 
     def format_eta(self, seconds):
         """For a given seconds to complete, returns an ETA string for humans.
@@ -1724,6 +1802,7 @@ class OctoslackPlugin(
     def send_slack_message(
         self,
         event,
+        event_settings,
         event_payload,
         channel_override,
         fallback,
@@ -1739,8 +1818,17 @@ class OctoslackPlugin(
         try:
             slackAPIToken = None
             slackWebHookUrl = None
+            pushbulletAccessToken = None
+            pushoverAppToken = None
+            rocketChatServerURL = None
+            rocketChatUsername = None
+            rocketChatPassword = None
 
-            connection_method = self._settings.get(["connection_method"], merged=True)
+            bold_text_start, bold_text_end, name_val_sep, newline = (
+                self.get_formatting_elements()
+            )
+
+            connection_method = self.connection_method()
             progress_update_method = (
                 self._settings.get(["supported_events"], merged=True)
                 .get("Progress")
@@ -1751,7 +1839,7 @@ class OctoslackPlugin(
                 .get("Progress")
                 .get("SlackMinSnapshotUpdateInterval")
             )
-            self._logger.debug("Slack connection method: " + connection_method)
+            self._logger.debug("Octoslack connection method: " + connection_method)
 
             if connection_method == "APITOKEN":
                 slackAPIToken = self._settings.get(
@@ -1759,26 +1847,83 @@ class OctoslackPlugin(
                 ).get("api_token")
                 if not slackAPIToken == None:
                     slackAPIToken = slackAPIToken.strip()
+                if slackAPIToken == None or len(slackAPIToken) == 0:
+                    self._logger.error(
+                        "Slack API connection not available, skipping message send"
+                    )
+                    return
             elif connection_method == "WEBHOOK":
                 slackWebHookUrl = self._settings.get(
                     ["slack_webhook_config"], merged=True
                 ).get("webhook_url")
                 if not slackWebHookUrl == None:
                     slackWebHookUrl = slackWebHookUrl.strip()
+                if slackWebHookUrl == None or len(slackWebHookUrl) == 0:
+                    self._logger.error(
+                        "Slack WebHook connection not available, skipping message send"
+                    )
+                    return
+            elif connection_method == "PUSHBULLET":
+                pushbulletAccessToken = self._settings.get(
+                    ["pushbullet_config"], merged=True
+                ).get("access_token")
+                if not pushbulletAccessToken == None:
+                    pushbulletAccessToken = pushbulletAccessToken.strip()
+                if pushbulletAccessToken == None or len(pushbulletAccessToken) == 0:
+                    self._logger.error(
+                        "Pushbullet connection not available, skipping message send"
+                    )
+                    return
+            elif connection_method == "PUSHOVER":
+                pushoverAppToken = self._settings.get(
+                    ["pushover_config"], merged=True
+                ).get("app_token")
+                if not pushoverAppToken == None:
+                    pushoverAppToken = pushoverAppToken.strip()
+                if pushoverAppToken == None or len(pushoverAppToken) == 0:
+                    self._logger.error(
+                        "Pushover connection not available, skipping message send"
+                    )
+                    return
+            elif connection_method == "ROCKETCHAT":
+                rocketChatServerURL = self._settings.get(
+                    ["rocketchat_config"], merged=True
+                ).get("server_url")
+                rocketChatUsername = self._settings.get(
+                    ["rocketchat_config"], merged=True
+                ).get("username")
+                rocketChatPassword = self._settings.get(
+                    ["rocketchat_config"], merged=True
+                ).get("password")
+                if not rocketChatServerURL == None:
+                    rocketChatServerURL = rocketChatServerURL.strip()
+                if not rocketChatUsername == None:
+                    rocketChatUsername = rocketChatUsername.strip()
+                if not rocketChatPassword == None:
+                    rocketChatPassword = rocketChatPassword.strip()
 
-            if (slackAPIToken == None or len(slackAPIToken) == 0) and (
-                slackWebHookUrl == None or len(slackWebHookUrl) == 0
-            ):
-                self._logger.error(
-                    "Slack connection not available, skipping message send"
-                )
-                return
+                if (
+                    rocketChatServerURL == None
+                    or len(rocketChatServerURL) == 0
+                    or rocketChatUsername == None
+                    or len(rocketChatUsername) == 0
+                    or rocketChatPassword == None
+                    or len(rocketChatPassword) == 0
+                ):
+                    self._logger.error(
+                        "Rocket.Chat connection not available, skipping message send"
+                    )
+                    return
 
             attachments = [{}]
             attachment = attachments[0]
 
             attachment["mrkdwn_in"] = ["text", "pretext"]
 
+            hosted_url = None
+            snapshot_upload_method = self._settings.get(
+                ["snapshot_upload_method"], merged=True
+            )
             snapshot_url_to_append = None
             snapshot_msg = None
 
@@ -1789,10 +1934,7 @@ class OctoslackPlugin(
                 snapshot_error_msgs = error_msgs
 
                 if hosted_url:
-                    if (
-                        self._settings.get(["snapshot_upload_method"], merged=True)
-                        == "SLACK"
-                    ):
+                    if snapshot_upload_method == "SLACK":
                         if slackAPIToken:
                             now = time.time()
 
@@ -1832,30 +1974,64 @@ class OctoslackPlugin(
                             )
                     else:
                         attachment["image_url"] = hosted_url
-                        if self.mattermost_mode():
-                            snapshot_url_to_append = hosted_url
+                        snapshot_url_to_append = hosted_url
+
+                        ##No need to append the URL to the body text as Slack will expose the URL itself
+                        if (
+                            connection_method == "APITOKEN"
+                            or (
+                                connection_method == "WEBHOOK"
+                                and not self.mattermost_mode()
+                            )
+                            or connection_method == "PUSHBULLET"
+                            or connection_method == "PUSHOVER"
+                            or (
+                                connection_method == "ROCKETCHAT"
+                                and snapshot_upload_method == "ROCKETCHAT"
+                            )
+                        ):
+                            snapshot_url_to_append = None
 
             if snapshot_error_msgs:
                 if text == None:
                     text = ""
                 elif len(text) > 0:
-                    text += "\n"
+                    text += newline
 
-                text += self.bold_text() + "Snapshot error(s):" + self.bold_text()
-                if self.mattermost_mode():
+                text += bold_text_start + "Snapshot error(s):" + bold_text_end
+                if connection_method == "WEBHOOK" and self.mattermost_mode():
                     text += "\n* " + "\n* ".join(error_msgs)
                 else:
-                    text += "\n"
-
                     for error_msg in snapshot_error_msgs:
-                        text += "\n *-* "
+                        if (
+                            connection_method == "WEBHOOK"
+                            or connection_method == "APITOKEN"
+                        ):
+                            text += "\n *-* "
+                        elif connection_method == "PUSHOVER":
+                            text += (
+                                newline
+                                + " "
+                                + bold_text_start
+                                + " - "
+                                + bold_text_end
+                                + " "
+                            )
+                        else:
+                            text += newline + " - "
+
                         text += error_msg
 
-            if self.mattermost_mode() and not footer == None and len(footer) > 0:
+            if (
+                connection_method == "WEBHOOK"
+                and self.mattermost_mode()
+                and not footer == None
+                and len(footer) > 0
+            ):
                 if text == None:
                     text = ""
                 elif len(text) > 0:
-                    text += "\n"
+                    text += newline
 
                 text += "`" + footer + "`"
                 footer = None
@@ -1866,7 +2042,7 @@ class OctoslackPlugin(
                 if text == None:
                     text = ""
                 elif len(text) > 0:
-                    text += "\n"
+                    text += newline
 
                 text += hosted_url
 
@@ -1877,7 +2053,7 @@ class OctoslackPlugin(
                 attachment["fallback"] = fallback
 
             if not pretext == None and len(pretext) > 0:
-                if self.mattermost_mode():
+                if connection_method == "WEBHOOK" and self.mattermost_mode():
                     pretext = "##### " + pretext + " #####"
                 attachment["pretext"] = pretext
 
@@ -1889,7 +2065,19 @@ class OctoslackPlugin(
 
             channels = channel_override
             if channels == None or len(channels.strip()) == 0:
-                channels = self._settings.get(["channel"], merged=True)
+                if connection_method == "WEBHOOK" or connection_method == "APITOKEN":
+                    channels = self._settings.get(["channel"], merged=True)
+                elif connection_method == "PUSHBULLET":
+                    channels = self._settings.get(
+                        ["pushbullet_config"], merged=True
+                    ).get("channel")
+                elif connection_method == "PUSHOVER":
+                    channels = "$myself$"
+                elif connection_method == "ROCKETCHAT":
+                    channels = self._settings.get(
+                        ["rocketchat_config"], merged=True
+                    ).get("channel")
+
             if not channels:
                 channels = ""
 
@@ -1914,11 +2102,12 @@ class OctoslackPlugin(
                         if text == None:
                             text = ""
                         elif len(text) > 0:
-                            text += "\n"
+                            text += newline
                         text += (
-                            self.bold_text()
-                            + "Timelapse: "
-                            + self.bold_text()
+                            bold_text_start
+                            + "Timelapse"
+                            + bold_text_end
+                            + name_val_sep
                             + timelapse_url
                         )
 
@@ -1926,18 +2115,29 @@ class OctoslackPlugin(
                         if text == None:
                             text = ""
                         elif len(text) > 0:
-                            text += "\n"
+                            text += newline
 
-                        text += (
-                            self.bold_text() + "Timelapse error(s):" + self.bold_text()
-                        )
-                        if self.mattermost_mode():
+                        text += bold_text_start + "Timelapse error(s):" + bold_text_end
+                        if connection_method == "WEBHOOK" and self.mattermost_mode():
                             text += "\n* " + "\n* ".join(timelapse_errors)
                         else:
-                            text += "\n"
-
                             for timelapse_error in timelapse_errors:
-                                text += "\n *-* "
+                                if (
+                                    connection_method == "WEBHOOK"
+                                    or connection_method == "APITOKEN"
+                                ):
+                                    text += "\n *-* "
+                                elif connection_method == "PUSHOVER":
+                                    text += (
+                                        newline
+                                        + " "
+                                        + bold_text_start
+                                        + " - "
+                                        + bold_text_end
+                                        + " "
+                                    )
+                                else:
+                                    text += newline + " - "
                                 text += timelapse_error
 
             if not text == None and len(text) > 0:
@@ -1947,10 +2147,7 @@ class OctoslackPlugin(
             attachments_json = json.dumps(attachments)
 
             self._logger.debug(
-                "Slack postMessage - Channels: "
-                + channels
-                + ", JSON: "
-                + attachments_json
+                "postMessage - Channels: " + channels + ", JSON: " + attachments_json
             )
 
             slack_identity_config = self._settings.get(["slack_identity"], merged=True)
@@ -1969,6 +2166,9 @@ class OctoslackPlugin(
 
             allow_empty_channel = connection_method == "WEBHOOK"
 
+            if len(channels) == 0:
+                self._logger.debug("No channels configured")
+
             for channel in channels.split(","):
                 channel = channel.strip()
 
@@ -1977,7 +2177,7 @@ class OctoslackPlugin(
 
                 allow_empty_channel = False
 
-                if slackAPIToken:
+                if not slackAPIToken == None and len(slackAPIToken) > 0:
                     try:
                         slackAPIConnection = Slacker(
                             slackAPIToken, timeout=SLACKER_TIMEOUT
@@ -2032,6 +2232,10 @@ class OctoslackPlugin(
                             )
 
                             if snapshot_msg.get("file_"):
+                                self._logger.debug(
+                                    "Deleting Slack asset: "
+                                    + str(snapshot_msg["file_"])
+                                )
                                 os.remove(snapshot_msg["file_"])
                             if event == "Progress":
                                 # bump out the 'next time' again as an upload can take some time
@@ -2091,8 +2295,277 @@ class OctoslackPlugin(
                         self._logger.exception(
                             "Slack WebHook message send error: " + str(e)
                         )
+                elif (
+                    not pushbulletAccessToken == None and len(pushbulletAccessToken) > 0
+                ):
+                    self._logger.debug("Send Pushbullet msg start")
+                    pb = Pushbullet(pushbulletAccessToken)
+
+                    pb_title = None
+                    pb_body = None
+
+                    if not pretext == None and len(pretext) > 0:
+                        pb_title = pretext
+
+                    if not text == None and len(text) > 0:
+                        pb_body = text
+
+                    if not footer == None and len(footer) > 0:
+                        if pb_body == None:
+                            pb_body = ""
+                        elif len(text) > 0:
+                            pb_body += newline
+
+                        pb_body += footer
+
+                    if pb_title == None:
+                        pb_title = ""
+                    if pb_body == None:
+                        pb_body = ""
+
+                    self._logger.debug("Pushbullet msg title: " + pb_title)
+                    self._logger.debug("Pushbullet msg body: " + pb_body)
+
+                    channel_obj = None
+                    if channel and not channel.lower() == "$myself$":
+                        try:
+                            channel_obj = pb.get_channel(channel)
+                        except Exception as e:
+                            self._logger.exception(
+                                "Failed to retrieve Pushbullet channel ("
+                                + channel
+                                + ") information: "
+                                + str(e)
+                            )
+                            continue
+
+                    if hosted_url and len(hosted_url) > 0:
+                        ##def push_file(self, file_name, file_url, file_type, body=None, title=None, device=None, chat=None, email=None, channel=None):
+
+                        pb_filename = hosted_url[hosted_url.rfind("/") + 1 :]
+                        self._logger.debug(
+                            "Pushbullet msg image details: file_name: "
+                            + pb_filename
+                            + ", file_url="
+                            + hosted_url
+                        )
+
+                        self._logger.debug("Executing Pushbullet push file")
+                        ##Pushbullet seems to universally accept any image file_type (e.g. for png or jpg) but something is required to render correctly
+                        push_rsp = pb.push_file(
+                            file_name=pb_filename,
+                            file_url=hosted_url,
+                            file_type="image/png",
+                            title=pb_title,
+                            body=pb_body,
+                            channel=channel_obj,
+                        )
+                    else:
+                        ##def push_note(self, title, body, device=None, chat=None, email=None, channel=None):
+
+                        self._logger.debug("Executing Pushbullet push note")
+                        push_rsp = pb.push_note(
+                            title=pb_title, body=pb_body, channel=channel_obj
+                        )
+
+                    self._logger.debug(
+                        "Pushbullet push response: " + json.dumps(push_rsp)
+                    )
+                elif not pushoverAppToken == None and len(pushoverAppToken) > 0:
+                    self._logger.debug("Send Pushover msg start")
+
+                    pushoverUserKey = self._settings.get(
+                        ["pushover_config"], merged=True
+                    ).get("user_key")
+                    if not pushoverUserKey == None:
+                        pushoverUserKey = pushoverUserKey.strip()
+                    if pushoverUserKey == None or len(pushoverUserKey) == 0:
+                        self._logger.error(
+                            "Pushover User Key not available, skipping message send"
+                        )
+                        return
+
+                    po_title = None
+                    po_body = None
+                    pb_image_url = None
+                    pb_image_title = None
+                    pb_image_local_path = None
+
+                    if not pretext == None and len(pretext) > 0:
+                        po_title = pretext
+
+                    if not text == None and len(text) > 0:
+                        po_body = text
+
+                    if not footer == None and len(footer) > 0:
+                        if po_body == None:
+                            po_body = ""
+                        elif len(text) > 0:
+                            po_body += newline
+
+                        po_body += footer
+
+                    if po_title == None:
+                        po_title = ""
+                    if po_body == None:
+                        po_body = ""
+
+                    if hosted_url and len(hosted_url) > 0:
+                        if snapshot_upload_method == "PUSHOVER":
+                            ##is a local file path
+                            pb_image_local_path = hosted_url
+                        else:
+                            pb_image_url = hosted_url
+                            pb_image_title = hosted_url[hosted_url.rfind("/") + 1 :]
+
+                    po_sound = event_settings["PushoverSound"]
+                    if po_sound:
+                        po_sound = po_sound.strip()
+                        if len(po_sound) == 0:
+                            po_sound = None
+
+                    po_priority = event_settings["PushoverPriority"]
+                    if po_priority:
+                        po_priority = po_priority.strip()
+                        if len(po_priority) == 0:
+                            po_priorirty = None
+
+                    po_expire = None
+                    po_retry = None
+
+                    if po_priority == "2":
+                        po_expire = 60
+                        po_retry = 30
+
+                    self._logger.debug("Pushover msg title: " + po_title)
+                    self._logger.debug("Pushover msg body: " + po_body)
+                    self._logger.debug("Pushover msg sound: " + str(po_sound))
+                    self._logger.debug("Pushover msg priority: " + str(po_priority))
+                    self._logger.debug("Pushover msg expire: " + str(po_expire))
+                    self._logger.debug("Pushover msg retry: " + str(po_retry))
+
+                    try:
+                        po = PushoverAPI(pushoverAppToken)
+
+                        ##send_message(user, message, device=None, title=None, url=None, url_title=None, image=None, priority=None, retry=None, expire=None, callback_url=None, timestamp=None, sound=None, html=False)
+                        po_rsp = po.send_message(
+                            user=pushoverUserKey,
+                            title=po_title,
+                            message=po_body,
+                            url=pb_image_url,
+                            url_title=pb_image_title,
+                            image=pb_image_local_path,
+                            priority=po_priority,
+                            retry=po_retry,
+                            expire=po_expire,
+                            sound=po_sound,
+                            html=1,
+                        )
+
+                        self._logger.debug(
+                            "Pushover push response: " + json.dumps(po_rsp)
+                        )
+                    except Exception as e:
+                        self._logger.exception("Pushover send error: " + str(e))
+
+                    if pb_image_local_path:
+                        self._logger.debug(
+                            "Deleting local Pushover asset: " + str(pb_image_local_path)
+                        )
+                        os.remove(pb_image_local_path)
+                elif (
+                    not rocketChatServerURL == None
+                    and len(rocketChatServerURL) > 0
+                    and not rocketChatUsername == None
+                    and len(rocketChatUsername) > 0
+                    and not rocketChatPassword == None
+                    and len(rocketChatPassword) > 0
+                ):
+                    self._logger.debug("Send Rocket.Chat msg start")
+
+                    ##api = RocketChatAPI(settings={'username': 'someuser', 'password': 'somepassword',
+                    ##          'domain': 'https://myrockethchatdomain.com'})
+
+                    rc = RocketChatAPI(
+                        settings={
+                            "username": rocketChatUsername,
+                            "password": rocketChatPassword,
+                            "domain": rocketChatServerURL,
+                        }
+                    )
+
+                    cc_msg = ""
+                    rc_image_local_path = None
+
+                    if hosted_url and len(hosted_url) > 0:
+                        if snapshot_upload_method == "ROCKETCHAT":
+                            # is a local file path
+                            rc_image_local_path = hosted_url
+
+                    if not pretext == None and len(pretext) > 0:
+                        rc_msg = "_*" + pretext + "*_"
+
+                    if not text == None and len(text) > 0:
+                        if len(rc_msg) > 0:
+                            rc_msg = rc_msg + "\n"
+                        rc_msg = rc_msg + text
+
+                    if not footer == None and len(footer) > 0:
+                        if len(rc_msg) > 0:
+                            rc_msg = rc_msg + "\n"
+                        rc_msg = rc_msg + footer
+
+                    self._logger.debug(
+                        "Rocket.Chat local image path: " + str(rc_image_local_path)
+                    )
+                    self._logger.debug("Rocket.Chat msg: " + rc_msg)
+
+                    try:
+                        ##def send_message(self, message, room_id, **kwargs):
+                        ##def upload_file(self, room_id, description, file, message, mime_type='text/plain', **kwargs):
+
+                        rc_room_id = rc.get_room_id(channel)
+                        self._logger.debug(
+                            "Rocket.Chat channel: "
+                            + channel
+                            + ", roomid: "
+                            + str(rc_room_id)
+                        )
+
+                        if rc_image_local_path and len(rc_image_local_path) > 0:
+                            self._logger.debug(
+                                "Rocket.Chat uploading asset + sending message"
+                            )
+                            rc_rsp = rc.upload_file(
+                                room_id=rc_room_id,
+                                description=None,
+                                file=rc_image_local_path,
+                                message=rc_msg,
+                                mime_type="image/png",
+                            )
+                        else:
+                            self._logger.debug("Rocket.Chat sending message")
+                            rc_rsp = rc.send_message(message=rc_msg, room_id=rc_room_id)
+
+                        self._logger.debug(
+                            "Rocket.Chat send message response: " + json.dumps(rc_rsp)
+                        )
+                    except requests.exceptions.HTTPError as he:
+                        self._logger.exception(
+                            "Rocket.Chat send HTTP error: " + str(he.response.text)
+                        )
+                    except Exception as e:
+                        self._logger.exception("Rocket.Chat send error: " + str(e))
+
+                    if rc_image_local_path:
+                        self._logger.debug(
+                            "Deleting local Rocket.Chat asset: "
+                            + str(rc_image_local_path)
+                        )
+                        os.remove(rc_image_local_path)
+
         except Exception as e:
-            self._logger.exception("Send Slack message error: " + str(e))
+            self._logger.exception("Send message error: " + str(e))
 
     tmp_imgur_client = None
 
@@ -2103,13 +2576,24 @@ class OctoslackPlugin(
         if snapshot_upload_method == None or snapshot_upload_method == "NONE":
             return None, None, None
 
+        connection_method = self.connection_method()
+
         local_file_path, error_msgs = self.retrieve_snapshot_images()
 
-        dest_filename = "Snapshot_" + str(uuid.uuid1()).replace("-", "") + ".png"
+        dest_filename = local_file_path[local_file_path.rfind("/") + 1 :]
 
-        if snapshot_upload_method == "SLACK":
-            # Return the file object, later logic will actually upload the asset
-            return local_file_path, None, None
+        # Return the file object, later logic will actually upload the asset
+        if (
+            (connection_method == "SLACKAPI" and snapshot_upload_method == "SLACK")
+            or (
+                connection_method == "PUSHOVER" and snapshot_upload_method == "PUSHOVER"
+            )
+            or (
+                connection_method == "ROCKETCHAT"
+                and snapshot_upload_method == "ROCKETCHAT"
+            )
+        ):
+            return local_file_path, error_msgs, None
 
         return self.upload_asset(local_file_path, dest_filename, None, error_msgs)
 
@@ -2167,10 +2651,21 @@ class OctoslackPlugin(
             ["snapshot_upload_method"], merged=True
         )
         if snapshot_upload_method == None or snapshot_upload_method == "NONE":
-            return None, None, None
+            return None, error_msgs, None
+
+        connection_method = self.connection_method()
 
         if error_msgs == None:
             error_msgs = []
+
+        self._logger.debug(
+            "Upload asset - Snapshot upload method: "
+            + snapshot_upload_method
+            + ", Local file path: "
+            + str(local_file_path)
+            + ", Destination filename: "
+            + str(dest_filename)
+        )
 
         if local_file_path:
             try:
@@ -2397,7 +2892,9 @@ class OctoslackPlugin(
                             "Failed to upload snapshot to Imgur (Exception): " + str(e)
                         )
                         error_msgs.append("Imgur error: " + str(e))
-                elif snapshot_upload_method == "SLACK":
+                elif (
+                    connection_method == "SLACKPI" and snapshot_upload_method == "SLACK"
+                ):
                     return self.upload_slack_asset(
                         local_file_path,
                         dest_filename,
@@ -2405,11 +2902,71 @@ class OctoslackPlugin(
                         channels,
                         error_msgs,
                     )
+                elif (
+                    connection_method == "PUSHBULLET"
+                    and snapshot_upload_method == "PUSHBULLET"
+                ):
+                    try:
+                        self._logger.debug("Uploading asset via Pushbullet")
+
+                        pushbullet_upload_start = time.time()
+
+                        pushbulletAccessToken = self._settings.get(
+                            ["pushbullet_config"], merged=True
+                        ).get("access_token")
+
+                        pb_rsp = None
+
+                        if not pushbulletAccessToken == None:
+                            pushbulletAccessToken = pushbulletAccessToken.strip()
+                        if (
+                            pushbulletAccessToken == None
+                            or len(pushbulletAccessToken) == 0
+                        ):
+                            self._logger.error(
+                                "Pushbullet connection not available, skipping asset upload"
+                            )
+                        else:
+                            with open(local_file_path, "rb") as img_file:
+                                try:
+                                    pb = Pushbullet(pushbulletAccessToken)
+                                    pb_rsp = pb.upload_file(img_file, dest_filename)
+                                    self._logger.debug(
+                                        "Pushbullet asset upload response: "
+                                        + str(pb_rsp)
+                                    )
+
+                                    pushbullet_upload_elapsed = (
+                                        time.time() - pushbullet_upload_start
+                                    )
+                                    self._logger.debug(
+                                        "Uploaded asset to Pushbullet in "
+                                        + str(round(pushbullet_upload_elapsed, 2))
+                                        + " seconds"
+                                    )
+                                except Exception as e:
+                                    self._logger.exception(
+                                        "Error while uploading snapshot, sending only a note: {}".format(
+                                            str(e)
+                                        )
+                                    )
+                                    error_msgs.append("Pushbullet error: " + str(e))
+
+                        if pb_rsp and "file_url" in pb_rsp:
+                            return pb_rsp["file_url"], error_msgs, None
+                    except Exception as e:
+                        self._logger.exception(
+                            "Failed to upload asset to Pushbullet: " + str(e)
+                        )
+                        error_msgs.append("Pushbullet error: " + str(e))
             except Exception as e:
                 self._logger.exception("Asset upload error: %s" % str(e))
                 error_msgs.append(str(e.message))
             finally:
                 if local_file_path:
+                    self._logger.debug(
+                        "Deleting local asset after upload: " + str(local_file_path)
+                    )
                     os.remove(local_file_path)
                 self.tmp_imgur_client = None
         return None, error_msgs, None
@@ -2420,7 +2977,7 @@ class OctoslackPlugin(
         if error_msgs == None:
             error_msgs = []
 
-        connection_method = self._settings.get(["connection_method"], merged=True)
+        connection_method = self.connection_method()
         if connection_method == None or connection_method != "APITOKEN":
             self._logger.error("Slack API connection required for Slack asset uploads")
             error_msgs.append("Slack API connection required for Slack asset uploads")
@@ -2571,6 +3128,8 @@ class OctoslackPlugin(
             + " seconds"
         )
 
+        self._logger.debug("download_image thread_responses: " + str(thread_responses))
+
         for (downloaded_image, error_msg) in thread_responses:
             if downloaded_image == None and error_msg == None:
                 continue
@@ -2583,7 +3142,7 @@ class OctoslackPlugin(
                 ## The single returned image will be deleted by the caller
 
         if len(downloaded_images) == 0:
-            return None, None
+            return None, error_msgs
 
         if len(downloaded_images) > 1:
             ## downloaded_images will be deleted internally by combine_images
@@ -2593,6 +3152,31 @@ class OctoslackPlugin(
             return combined_image, error_msgs
         else:
             return downloaded_images[0], error_msgs
+
+    def generate_snapshot_filename(self):
+        return "Snapshot_" + str(uuid.uuid1()).replace("-", "") + ".png"
+
+    def rename_snapshot_filename(self, tmp_filename):
+        try:
+            self._logger.debug(
+                "Rename tmp file - Existing tmp filename: " + str(tmp_filename)
+            )
+
+            new_filename = (
+                tmp_filename[: tmp_filename.rfind("/")]
+                + "/"
+                + self.generate_snapshot_filename()
+            )
+            self._logger.debug(
+                "Rename tmp file - New tmp filename: " + str(new_filename)
+            )
+
+            os.rename(tmp_filename, new_filename)
+
+            return new_filename
+        except Exception as e:
+            self._logger.exception("Error renaming tmp filename: " + str(e))
+            return tmp_filename
 
     def download_image(self, url, flip_h, flip_v, rotate_90, rsp_idx, responses):
         imgData = None
@@ -2636,6 +3220,11 @@ class OctoslackPlugin(
             imgRsp = urllib2.urlopen(imgReq, timeout=2)
 
             temp_fd, temp_filename = mkstemp()
+            os.close(temp_fd)
+
+            temp_filename = self.rename_snapshot_filename(temp_filename)
+            self._logger.debug("Snapshot download temp filename: " + str(temp_filename))
+
             temp_file = open(temp_filename, "wb")
             temp_file.write(imgRsp.read())
 
@@ -2704,8 +3293,6 @@ class OctoslackPlugin(
         finally:
             if not imgData == None:
                 imgData.close()
-            if not temp_fd == None:
-                os.close(temp_fd)
 
     def combine_images(self, local_paths):
 
@@ -2880,6 +3467,11 @@ class OctoslackPlugin(
                         row_idx += 1
 
             temp_fd, temp_filename = mkstemp()
+            os.close(temp_fd)
+
+            temp_filename = self.rename_snapshot_filename(temp_filename)
+
+            self._logger.debug("Combine image temp filename: " + str(temp_filename))
             new_im.save(temp_filename, "JPEG")
 
             statinfo = os.stat(temp_filename)
@@ -2906,11 +3498,6 @@ class OctoslackPlugin(
                 "Error generating combined snapshot image: %s" % (str(e))
             )
             return None, str(e.message)
-        finally:
-            if not temp_fd == None:
-                os.close(temp_fd)
-
-                ##~~ GCode processing
 
     active_gcode_events = []
     active_gcode_received_events = []
@@ -2920,9 +3507,7 @@ class OctoslackPlugin(
         try:
             self._logger.debug("Updating G-code listeners")
 
-            events_str = connection_method = self._settings.get(
-                ["gcode_events"], merged=True
-            )
+            events_str = self._settings.get(["gcode_events"], merged=True)
 
             new_gcode_events = []
             new_gcode_received_events = []

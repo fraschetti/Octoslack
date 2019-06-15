@@ -2,7 +2,7 @@
     <h2>Octoslack</h2>
     <div class="octoslack_config_group">
 	<div class="octoprint_config_row">
-            <input type="checkbox" class="octoslack_valign" id="octoslack_include_raspi_temp" data-bind="checked: settings.plugins.Octoslack.include_raspi_temp">
+            <input type="checkbox" class="octoslack_valign octoslack_checkbox_margin_override" id="octoslack_include_raspi_temp" data-bind="checked: settings.plugins.Octoslack.include_raspi_temp">
             <div class="octoslack_label octoslack_action_label" onclick="$('#octoslack_include_raspi_temp').trigger('click')">Include RasPi temp</div>
 	    <br/>
 	    <small class="muted">Include the Raspberry Pi temperature alongside printer temperatures</small>
@@ -72,7 +72,7 @@
 	    </p>
 	</div>
 	<div class="octoprint_config_row">
-            <input type="checkbox" class="octoslack_valign" id="octoslack_ignore_cancel_fail_event" data-bind="checked: settings.plugins.Octoslack.ignore_cancel_fail_event">
+            <input type="checkbox" class="octoslack_valign octoslack_checkbox_margin_override" id="octoslack_ignore_cancel_fail_event" data-bind="checked: settings.plugins.Octoslack.ignore_cancel_fail_event">
             <div class="octoslack_label octoslack_action_label" onclick="$('#octoslack_ignore_cancel_fail_event').trigger('click')">Ignore failed event for cancelled prints</div>
 	    <br/>
 	    <small class="muted">
@@ -80,181 +80,312 @@
                 As designed, OctoPrint not only triggers a <strong>Print cancelled</strong> event but also a corresponding <strong>Print failed</strong> event. Enabling this option (supported in OctoPrint 1.3.3+) will instruct the plugin to ignore the <strong>Print failed</strong> for this particular scenario.
             </small>
 	</div>
-	<div class="octoprint_config_row">
-            <input type="checkbox" class="octoslack_valign" id="octoslack_mattermost_compatabilty_mode" onclick="Octoslack.applyMattermostChanges();" data-bind="checked: settings.plugins.Octoslack.mattermost_compatability_mode">
-            <div class="octoslack_label octoslack_action_label" onclick="$('#octoslack_mattermost_compatabilty_mode').trigger('click')">Mattermost compatability</div>
-	    <br/>
-	    <small class="muted">
-		While Mattermost provides a Slack compatible Webhook, there are a few differences that need to be accounted for. Enabling this mode will limit this config dialog to only the Mattermost compatible options and will also allow the plugin to make formatting changes as necessary.
-		<br/>
-		NOTE: Unlike Slack, Mattermost leverages Markdown for message formatting. Any message format customizations should be made using Markdown syntax
-	    </small>
-	</div>
     </div>
     <br/>
-    <h2>Slack configuration</h2>
+    <h2>Connection type</h2>
     <div class="octoslack_config_group">
-        <h3>Slack connection</h3>
 	<input type="hidden" id="octoslack_connection_method_hidden" data-bind="value: settings.plugins.Octoslack.connection_method">
         <div>
-            <input type="radio" name="octoslack_connection_type" id="octoslack_connection_type_apitoken" onclick="Octoslack.changeConnectionType(this.value);" class="octoslack_valign" value="APITOKEN">
+            <input type="radio" name="octoslack_connection_type" id="octoslack_connection_type_apitoken" onclick="Octoslack.changeConnectionType(this.value);" class="octoslack_valign octoslack_checkbox_margin_override" value="APITOKEN">
             <span class="octoslack_valign octoslack_action_label" onclick="$('#octoslack_connection_type_apitoken').trigger('click')">Slack API Token</span>
         </div>
         <div>
-            <input type="radio" name="octoslack_connection_type" id="octoslack_connection_type_webhook" onclick="Octoslack.changeConnectionType(this.value);" class="octoslack_valign" value="WEBHOOK">
-            <span class="octoslack_valign octoslack_action_label" onclick="$('#octoslack_connection_type_webhook').trigger('click')">Slack WebHook URL</span>
+            <input type="radio" name="octoslack_connection_type" id="octoslack_connection_type_webhook" onclick="Octoslack.changeConnectionType(this.value);" class="octoslack_valign octoslack_checkbox_margin_override" value="WEBHOOK">
+            <span class="octoslack_valign octoslack_action_label" onclick="$('#octoslack_connection_type_webhook').trigger('click')">Slack/Mattermost WebHook URL</span>
         </div>
-	<small class="muted">Most features will be available for both connection methods but some may specifically require use of the API Token</small>
-        <div id="octoslack_apitoken_group" class="octoslack_hidden">
-            <br/>
-            <div class="octoprint_config_row">
-                <span class="octoslack_label">API Token</span>
-                <input type="text" class="octoslack_width_auto" id="octoslack_apitoken" size="60" placeholder="xoxb-111111111111-aaaaaaaaaaaaaaaaaaaaaaaa" data-bind="value: settings.plugins.Octoslack.slack_apitoken_config.api_token">
-		</br>
-		<small class="muted">
-                    An API Token can be generated via your Slack team's settings dialog.
-                    <br/>
-                    Apps &amp; integrations --&gt; Manage --&gt; Custom Integrations --&gt; Bots
-                    <br/>
-                    NOTE: Switching to or from the API Token connection method requires an OctoPrint restart to either establish or close the associated websocket connection
-                </small>
-            </div>
-	    <div class="octoprint_config_row">
-                <input type="checkbox" class="octoslack_valign" id="octoslack_bot_commands" data-bind="checked: settings.plugins.Octoslack.slack_apitoken_config.enable_commands">
-                <div class="octoslack_label octoslack_action_label" onclick="$('#octoslack_bot_commands').trigger('click')">Listen for commands</div>
-	        <br/>
-	        <small class="muted">
-			The API Token allows for bi-directional communication between client and server meaning this plugin can receive and react to messages.
-			<br/>
-			NOTE: An OctoPrint restart is required for the plugin to start listening for commands
-			<br/>
-			NOTE: While the plugin will stop responding to commands immediate after this setting is disabled, the connection to Slack will not be torn down until OctoPrint is restarted
-			<br/>
-			When enabled, a command can be issued to the plugin via a mention.
-			<br/>
-			e.g.    @botname status
-			<br/>
-			(where @botname must match the bot name configured in Slack and as opposed to the Username configured for this plugin)
-			<br/>
-			<p class="octoslack_indented">
-				The supported commands are:
-				<br/>
-				<strong>help</strong> - Displays this list of commands
-				<br/>
-				<strong>status</strong> - Display the current print job status
-				<br/>
-				<strong>stop</strong> - Stop the current print
-				<br/>
-				<strong>pause</strong> - Pause the current print
-				<br/>
-				<strong>resume</strong> - Resume a paused print
-			</p>
-			<br/>
-		</small>
-	    </div>
-            <div class="octoprint_config_row">
-                <span class="octoslack_label">Confirmation emoji</span>
-                <input type="text" class="octoslack_width_auto" size="15" data-bind="value: settings.plugins.Octoslack.slack_apitoken_config.commands_positive_reaction">
-                <br/>
-		<small class="muted">If commands are enabled, this emoji is added as a reaction to valid commands</small>
-            </div>
-            <div class="octoprint_config_row">
-                <span class="octoslack_label">Processing emoji</span>
-                <input type="text" class="octoslack_width_auto" size="15" data-bind="value: settings.plugins.Octoslack.slack_apitoken_config.commands_processing_reaction">
-                <br/>
-		<small class="muted">If commands are enabled, this emoji is added as a reaction before the actual command is executed to give the user some initial feedback while a potentially long running command is executing (e.g. capturing, processing, and uploading a snapshot)</small>
-            </div>
-            <div class="octoprint_config_row">
-                <span class="octoslack_label">Failure emoji</span>
-                <input type="text" class="octoslack_width_auto" size="15" data-bind="value: settings.plugins.Octoslack.slack_apitoken_config.commands_negative_reaction">
-                <br/>
-		<small class="muted">If commands are enabled, this emoji is added to invalid commands as well as valid commands that cannot be executed (e.g. <strong>pause</strong> is called on an already paused print)</small>
-            </div>
+	<small class="muted">Most Slack features will be available for both connection methods but some may specifically require use of the Slack API Token</small>
+        <div>
+            <input type="radio" name="octoslack_connection_type" id="octoslack_connection_type_pushbullet" onclick="Octoslack.changeConnectionType(this.value);" class="octoslack_valign octoslack_checkbox_margin_override" value="PUSHBULLET">
+            <span class="octoslack_valign octoslack_action_label" onclick="$('#octoslack_connection_type_pushbullet').trigger('click')">Pushbullet</span>
         </div>
-        <div id="octolack_webhook_group" class="octoslack_hidden">
-            <br/>
-            <div class="octoprint_config_row">
-                <span class="octoslack_label">WebHook URL</span>
-                <input type="text" class="octoslack_width_auto" size="60" data-bind="value: settings.plugins.Octoslack.slack_webhook_config.webhook_url">
-		</br>
-		<small class="muted">A WebHook URL can be generated via your Slack team's settings dialog. Apps &amp; integrations --&gt; Manage --&gt; Custom Integrations --&gt; Incoming WebHooks</small>
-            </div>
+        <div>
+            <input type="radio" name="octoslack_connection_type" id="octoslack_connection_type_pushover" onclick="Octoslack.changeConnectionType(this.value);" class="octoslack_valign octoslack_checkbox_margin_override" value="PUSHOVER">
+            <span class="octoslack_valign octoslack_action_label" onclick="$('#octoslack_connection_type_pushover').trigger('click')">Pushover</span>
         </div>
-        <h3>Slack channel(s)</h3>
-        <div class="octoprint_config_row">
-            <div class="octoslack_label">Channel(s)</div>
-            <input type="text" class="octoslack_width_auto" size="60" id="octoslack_channel" data-bind="value: settings.plugins.Octoslack.channel">
-	    <br/>
-	    <small class="muted">
-                A single channel can be specified or multiple channels can provided via a comma-separated list (channel1,channel2,channel3)
-	        <br/>
-                Optional for WebHooks but required for when using an API Token
-            </small>
-        </div>
-        <h3>Slack identity</h3>
-        <div class="octoprint_config_row">
-            <input type="checkbox" id="octoslack_slack_identity_check" onClick="Octoslack.toggleUseSlackIdentity(this);" class="octoslack_valign" data-bind="checked: settings.plugins.Octoslack.slack_identity.existing_user">
-            <div class="octoslack_label octoslack_action_label" onclick="$('#octoslack_slack_identity_check').trigger('click')">Use Slack identity</div>
-	    <br/>
-	    <small class="muted">When checked, Octoslack will Use the name/icon defined for the Bot/WebHook. When unchecked, a custom name and icon can be specified</small>
-        </div>
-        <div id="octoslack_custom_identity_group" class="octoslack_hidden">
-            <br/>
-            <div class="octoprint_config_row">
-                <span class="octoslack_label">Username</span>
-                <input type="text" class="octoslack_width_auto" size="25" data-bind="value: settings.plugins.Octoslack.slack_identity.username">
-                <br/>
-            </div>
-            <div class="octoprint_config_row">
-                <span class="octoslack_label">Icon emoji</span>
-                <input type="text" class="octoslack_width_auto" id="octoslack_custom_identity_icon_emoji" size="15" data-bind="value: settings.plugins.Octoslack.slack_identity.icon_emoji">
-                <br/>
-            </div>
-            <div class="octoprint_config_row">
-                <span class="octoslack_label">Icon URL</span>
-                <input type="text" class="octoslack_width_auto" size="60" data-bind="value: settings.plugins.Octoslack.slack_identity.icon_url">
-                <br/>
-            </div>
+        <div>
+            <input type="radio" name="octoslack_connection_type" id="octoslack_connection_type_rocketchat" onclick="Octoslack.changeConnectionType(this.value);" class="octoslack_valign octoslack_checkbox_margin_override" value="ROCKETCHAT">
+            <span class="octoslack_valign octoslack_action_label" onclick="$('#octoslack_connection_type_rocketchat').trigger('click')">Rocket.Chat</span>
         </div>
     </div>
+    <br/>
+    <div id="octoslack_slack_config_section" class="octoslack_hidden"> <!-- Start Slack config section -->
+        <h2>Slack configuration</h2>
+        <div class="octoslack_config_group">
+            <div id="octoslack_apitoken_group" class="octoslack_hidden">
+                <br/>
+                <div class="octoprint_config_row">
+                    <span class="octoslack_label">API Token</span>
+                    <input type="text" class="octoslack_width_auto" id="octoslack_apitoken" size="60" placeholder="xoxb-111111111111-aaaaaaaaaaaaaaaaaaaaaaaa" data-bind="value: settings.plugins.Octoslack.slack_apitoken_config.api_token">
+		    </br>
+		    <small class="muted">
+                        An API Token can be generated via your Slack team's settings dialog.
+                        <br/>
+                        Apps &amp; integrations --&gt; Manage --&gt; Custom Integrations --&gt; Bots
+                        <br/>
+                        NOTE: Switching to or from the API Token connection method requires an OctoPrint restart to either establish or close the associated websocket connection
+                    </small>
+                </div>
+	        <div class="octoprint_config_row">
+                    <input type="checkbox" class="octoslack_valign octoslack_checkbox_margin_override" id="octoslack_bot_commands" data-bind="checked: settings.plugins.Octoslack.slack_apitoken_config.enable_commands">
+                    <div class="octoslack_label octoslack_action_label" onclick="$('#octoslack_bot_commands').trigger('click')">Listen for commands</div>
+	            <br/>
+	            <small class="muted">
+			    The API Token allows for bi-directional communication between client and server meaning this plugin can receive and react to messages.
+			    <br/>
+			    NOTE: An OctoPrint restart is required for the plugin to start listening for commands
+			    <br/>
+			    NOTE: While the plugin will stop responding to commands immediate after this setting is disabled, the connection to Slack will not be torn down until OctoPrint is restarted
+			    <br/>
+			    When enabled, a command can be issued to the plugin via a mention.
+			    <br/>
+			    e.g.    @botname status
+			    <br/>
+			    (where @botname must match the bot name configured in Slack and as opposed to the Username configured for this plugin)
+			    <br/>
+			    <p class="octoslack_indented">
+				    The supported commands are:
+				    <br/>
+				    <strong>help</strong> - Displays this list of commands
+				    <br/>
+				    <strong>status</strong> - Display the current print job status
+				    <br/>
+				    <strong>stop</strong> - Stop the current print
+				    <br/>
+				    <strong>pause</strong> - Pause the current print
+				    <br/>
+				    <strong>resume</strong> - Resume a paused print
+			    </p>
+			    <br/>
+	  	    </small>
+	        </div>
+                <div class="octoprint_config_row">
+                    <span class="octoslack_label">Confirmation emoji</span>
+                    <input type="text" class="octoslack_width_auto" size="15" data-bind="value: settings.plugins.Octoslack.slack_apitoken_config.commands_positive_reaction">
+                    <br/>
+		    <small class="muted">If commands are enabled, this emoji is added as a reaction to valid commands</small>
+                </div>
+                <div class="octoprint_config_row">
+                    <span class="octoslack_label">Processing emoji</span>
+                    <input type="text" class="octoslack_width_auto" size="15" data-bind="value: settings.plugins.Octoslack.slack_apitoken_config.commands_processing_reaction">
+                    <br/>
+		    <small class="muted">If commands are enabled, this emoji is added as a reaction before the actual command is executed to give the user some initial feedback while a potentially long running command is executing (e.g. capturing, processing, and uploading a snapshot)</small>
+                </div>
+                <div class="octoprint_config_row">
+                    <span class="octoslack_label">Failure emoji</span>
+                    <input type="text" class="octoslack_width_auto" size="15" data-bind="value: settings.plugins.Octoslack.slack_apitoken_config.commands_negative_reaction">
+                    <br/>
+		    <small class="muted">If commands are enabled, this emoji is added to invalid commands as well as valid commands that cannot be executed (e.g. <strong>pause</strong> is called on an already paused print)</small>
+                </div>
+            </div>
+            <div id="octolack_webhook_group" class="octoslack_hidden">
+                <br/>
+                <div class="octoprint_config_row">
+                    <span class="octoslack_label">WebHook URL</span>
+                    <input type="text" class="octoslack_width_auto" size="60" data-bind="value: settings.plugins.Octoslack.slack_webhook_config.webhook_url">
+		    </br>
+		    <small class="muted">A WebHook URL can be generated via your Slack team's settings dialog. Apps &amp; integrations --&gt; Manage --&gt; Custom Integrations --&gt; Incoming WebHooks</small>
+                </div>
+            </div>
+	    <div class="octoprint_config_row">
+                <input type="checkbox" class="octoslack_valign octoslack_checkbox_margin_override" id="octoslack_mattermost_compatabilty_mode" onclick="Octoslack.applyMattermostChanges();" data-bind="checked: settings.plugins.Octoslack.mattermost_compatability_mode">
+                <div class="octoslack_label octoslack_action_label" onclick="$('#octoslack_mattermost_compatabilty_mode').trigger('click')">Mattermost compatability</div>
+	        <br/>
+	        <small class="muted">
+		    While Mattermost provides a Slack compatible Webhook, there are a few differences that need to be accounted for. Enabling this mode will limit this config dialog to only the Mattermost compatible options and will also allow the plugin to make formatting changes as necessary.
+		    <br/>
+		    NOTE: Unlike Slack, Mattermost leverages Markdown for message formatting. Any message format customizations should be made using Markdown syntax
+	        </small>
+	    </div>
+            <h3>Slack channel(s)</h3>
+            <div class="octoprint_config_row">
+                <div class="octoslack_label">Channel(s)</div>
+                <input type="text" class="octoslack_width_auto" size="60" id="octoslack_channel" data-bind="value: settings.plugins.Octoslack.channel">
+	        <br/>
+	        <small class="muted">
+                    A single channel can be specified or multiple channels can provided via a comma-separated list (channel1,channel2,channel3)
+	            <br/>
+                    Optional for WebHooks but required for when using an API Token
+                </small>
+            </div>
+            <h3>Slack identity</h3>
+            <div class="octoprint_config_row">
+                <input type="checkbox" id="octoslack_slack_identity_check" onClick="Octoslack.toggleUseSlackIdentity(this);" class="octoslack_valign octoslack_checkbox_margin_override" data-bind="checked: settings.plugins.Octoslack.slack_identity.existing_user">
+                <div class="octoslack_label octoslack_action_label" onclick="$('#octoslack_slack_identity_check').trigger('click')">Use Slack identity</div>
+	        <br/>
+    	        <small class="muted">When checked, Octoslack will Use the name/icon defined for the Bot/WebHook. When unchecked, a custom name and icon can be specified</small>
+            </div>
+            <div id="octoslack_custom_identity_group" class="octoslack_hidden">
+                <br/>
+                <div class="octoprint_config_row">
+                    <span class="octoslack_label">Username</span>
+                    <input type="text" class="octoslack_width_auto" size="25" data-bind="value: settings.plugins.Octoslack.slack_identity.username">
+                    <br/>
+                </div>
+                <div class="octoprint_config_row">
+                    <span class="octoslack_label">Icon emoji</span>
+                    <input type="text" class="octoslack_width_auto" id="octoslack_custom_identity_icon_emoji" size="15" data-bind="value: settings.plugins.Octoslack.slack_identity.icon_emoji">
+                    <br/>
+                </div>
+                <div class="octoprint_config_row">
+                    <span class="octoslack_label">Icon URL</span>
+                    <input type="text" class="octoslack_width_auto" size="60" data-bind="value: settings.plugins.Octoslack.slack_identity.icon_url">
+                    <br/>
+                </div>
+            </div>
+        </div>
+    </div> <!-- End Slack config section -->
+    <div id="octoslack_pushbullet_config_section" class="octoslack_hidden"> <!-- Start Pushbullet config section -->
+        <h2>Pushbullet configuration</h2>
+        <div class="octoslack_config_group">
+            <br/>
+            <div class="octoprint_config_row">
+                <span class="octoslack_label">Access Token</span>
+                <input type="text" class="octoslack_width_auto" id="octoslack_pushbullet_access_token" size="60" placeholder="o.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" data-bind="value: settings.plugins.Octoslack.pushbullet_config.access_token">
+		</br>
+		<small class="muted">
+                    An Access Token can be generated on your <a href="https://www.pushbullet.com/#settings" target="_blank">Pushbullet account settings</a> page
+                </small>
+            </div>
+            <h3>Pushbullet channel(s)</h3>
+            <div class="octoprint_config_row">
+                <div class="octoslack_label">Channel(s)</div>
+                <input type="text" class="octoslack_width_auto" size="60" id="pushbullet_channel" data-bind="value: settings.plugins.Octoslack.pushbullet_config.channel">
+	        <br/>
+	        <small class="muted">
+                    A single channel can be specified or multiple channels can provided via a comma-separated list (channeltag1,channeltag2,channeltag3). To send a direct message to yourself, <b>$myself$</b> can be used in lieu of a channel tag here and in the event channel overrides
+                </small>
+            </div>
+        </div>
+    </div> <!-- End Pushbullet config section -->
+    <div id="octoslack_pushover_config_section" class="octoslack_hidden"> <!-- Start Pushover config section -->
+        <h2>Pushover configuration</h2>
+        <div class="octoslack_config_group">
+            <br/>
+            <div class="octoprint_config_row">
+                <span class="octoslack_label">App Token</span>
+                <input type="text" class="octoslack_width_auto" id="octoslack_pushover_app_token" size="60" placeholder="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" data-bind="value: settings.plugins.Octoslack.pushover_config.app_token">
+		</br>
+		<small class="muted">
+                    Register your Pushover application <a href="https://pushover.net/apps/build" target="_blank">here</a>. Your App Token will be available on the next screen
+                </small>
+            </div>
+            <div class="octoprint_config_row">
+                <span class="octoslack_label">User/Group Key</span>
+                <input type="text" class="octoslack_width_auto" id="octoslack_pushover_user_key" size="60" placeholder="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" data-bind="value: settings.plugins.Octoslack.pushover_config.user_key">
+		</br>
+		<small class="muted">
+                    The message recipient's user or group key. Your user key is available on your <a href="https://pushover.net/" target="_blank">Pushover dashboard</a> page
+                </small>
+            </div>
+        </div>
+    </div> <!-- End Pushover config section -->
+    <div id="octoslack_rocketchat_config_section" class="octoslack_hidden"> <!-- Start Rockat.Chat config section -->
+        <h2>Rocket.Chat configuration</h2>
+        <div class="octoslack_config_group">
+            <br/>
+            <div class="octoprint_config_row">
+                <span class="octoslack_label">Server URL</span>
+                <input type="text" class="octoslack_width_auto" id="octoslack_pushover_server_url" size="60" placeholder="https://open.rocket.chat" data-bind="value: settings.plugins.Octoslack.rocketchat_config.server_url">
+		</br>
+		<small class="muted">
+                    The Rocket.Chat API authenticates with the username/password in plain text. It is highly reccommended to always connect to your Rocket.Chat server over https
+                </small>
+            </div>
+            <div class="octoprint_config_row">
+                <span class="octoslack_label">Username</span>
+                <input type="text" class="octoslack_width_auto" id="octoslack_pushover_user_key" size="30" data-bind="value: settings.plugins.Octoslack.rocketchat_config.username">
+		</br>
+		<small class="muted">
+                    Rocket.Chat username
+                </small>
+            </div>
+            <div class="octoprint_config_row">
+                <span class="octoslack_label">Password</span>
+                <input type="password" class="octoslack_width_auto" id="octoslack_pushover_user_key" size="30" data-bind="value: settings.plugins.Octoslack.rocketchat_config.password">
+		</br>
+		<small class="muted">
+                    Rocket.Chat password
+                </small>
+            </div>
+            <h3>Rocket.Chat channel(s)</h3>
+            <div class="octoprint_config_row">
+                <div class="octoslack_label">Channel(s)</div>
+                <input type="text" class="octoslack_width_auto" size="60" id="rocketchat_channel" data-bind="value: settings.plugins.Octoslack.rocketchat_config.channel">
+	        <br/>
+	        <small class="muted">
+                    A single channel can be specified or multiple channels can provided via a comma-separated list (channel1,channel2,channel3)
+                </small>
+            </div>
+        </div>
+    </div> <!-- End Rocket.Chat config section -->
     <br/>
     <h2>Snapshots</h2>
     <div class="octoslack_config_group">
         <h3>Snapshot hosting</h3>
 	<input type="hidden" id="octoslack_upload_method_hidden" data-bind="value: settings.plugins.Octoslack.snapshot_upload_method">
         <div>
-            <input type="radio" name="octoslackSnapshotUploadMethod" id="octoslackSnapshotUploadMethod_none"  onclick="Octoslack.changeSnapshotUploadMethod(this);" class="octoslack_valign" value="NONE">
+            <input type="radio" name="octoslackSnapshotUploadMethod" id="octoslackSnapshotUploadMethod_none"  onclick="Octoslack.changeSnapshotUploadMethod(this);" class="octoslack_valign octoslack_checkbox_margin_override" value="NONE">
             <span class="octoslack_valign octoslack_action_label" onclick="$('#octoslackSnapshotUploadMethod_none').trigger('click')">None</span>
 	    <br/>
 	    <small class="muted">No snapshots will be uploaded</small>
         </div>
         <div>
-            <input type="radio" name="octoslackSnapshotUploadMethod" id="octoslackSnapshotUploadMethod_imgur" onclick="Octoslack.changeSnapshotUploadMethod(this);" class="octoslack_valign" value="IMGUR">
+            <input type="radio" name="octoslackSnapshotUploadMethod" id="octoslackSnapshotUploadMethod_imgur" onclick="Octoslack.changeSnapshotUploadMethod(this);" class="octoslack_valign octoslack_checkbox_margin_override" value="IMGUR">
             <span class="octoslack_valign octoslack_action_label" onclick="$('#octoslackSnapshotUploadMethod_imgur').trigger('click')">Imgur</span>
 	    <br/>
-	    <small class="muted">Leverage free Imgur hosting - sign up for an account at <a href="http://imgur.com" target="_blank">imgur.com</a></small>
+	    <small class="muted"><a href="http://imgur.com" target="_blank">imgur.com</a></small>
         </div>
         <div>
-            <input type="radio" name="octoslackSnapshotUploadMethod" id="octoslackSnapshotUploadMethod_s3" onclick="Octoslack.changeSnapshotUploadMethod(this);" class="octoslack_valign" value="S3">
+            <input type="radio" name="octoslackSnapshotUploadMethod" id="octoslackSnapshotUploadMethod_s3" onclick="Octoslack.changeSnapshotUploadMethod(this);" class="octoslack_valign octoslack_checkbox_margin_override" value="S3">
             <span class="octoslack_valign octoslack_action_label" onclick="$('#octoslackSnapshotUploadMethod_s3').trigger('click')">Amazon S3</span>
 	    <br/>
-	    <small class="muted">Leverage Amazon S3 (eventually will incur a cost) at  <a href="https://aws.amazon.com/free" target="_blank">https://aws.amazon.com/free</a></small>
+	    <small class="muted"><a href="https://aws.amazon.com/free" target="_blank">https://aws.amazon.com/free</a></small>
         </div>
         <div>
-            <input type="radio" name="octoslackSnapshotUploadMethod" id="octoslackSnapshotUploadMethod_minio" onclick="Octoslack.changeSnapshotUploadMethod(this);" class="octoslack_valign" value="MINIO">
+            <input type="radio" name="octoslackSnapshotUploadMethod" id="octoslackSnapshotUploadMethod_minio" onclick="Octoslack.changeSnapshotUploadMethod(this);" class="octoslack_valign octoslack_checkbox_margin_override" value="MINIO">
             <span class="octoslack_valign octoslack_action_label" onclick="$('#octoslackSnapshotUploadMethod_minio').trigger('click')">Minio S3</span>
 	    <br/>
-	    <small class="muted">Leverage Minio S3 compatible self hostable storage (see <a href="https://minio.io" target="_blank">Minio.io</a>)</small>
+	    <small class="muted"><a href="https://minio.io" target="_blank">Minio.io</a></small>
         </div>
         <div id="octoslackSlackUploadMethod">
             <input type="radio" name="octoslackSnapshotUploadMethod"
             id="octoslackSnapshotUploadMethod_slack"
             onclick="Octoslack.changeSnapshotUploadMethod(this);"
-            class="octoslack_valign" value="SLACK">
+            class="octoslack_valign octoslack_checkbox_margin_override" value="SLACK">
             <span class="octoslack_valign octoslack_action_label"
               onclick="$('#octoslackSnapshotUploadMethod_slack').trigger('click')">Slack</span>
            <br/>
            <small class="muted">Snapshot images will be uploaded directly to Slack as general attachments. It's highly recommended to only use this option when sending messages to a dedicated Slack channel. Snapshots uploaded to Slack directly are not connected to Slack messages and depending on channel activity, may not render immediately after the intended Slack message. It's also worth noting that even with a dedicated channel, if multiple Slack messages are generated within a short period, the aforementioned render location issue may also occur. Requires Slack API Token.</small>
+        </div>
+        <div id="octoslackPushbulletUploadMethod">
+            <input type="radio" name="octoslackSnapshotUploadMethod"
+            id="octoslackSnapshotUploadMethod_pushbullet"
+            onclick="Octoslack.changeSnapshotUploadMethod(this);"
+            class="octoslack_valign octoslack_checkbox_margin_override" value="PUSHBULLET">
+            <span class="octoslack_valign octoslack_action_label"
+              onclick="$('#octoslackSnapshotUploadMethod_pushbullet').trigger('click')">Pushbullet</span>
+           <br/>
+           <small class="muted">Snapshot images will hosted by Pushbullet</small>
+        </div>
+        <div id="octoslackPushoverUploadMethod">
+            <input type="radio" name="octoslackSnapshotUploadMethod"
+            id="octoslackSnapshotUploadMethod_pushover"
+            onclick="Octoslack.changeSnapshotUploadMethod(this);"
+            class="octoslack_valign octoslack_checkbox_margin_override" value="PUSHOVER">
+            <span class="octoslack_valign octoslack_action_label"
+              onclick="$('#octoslackSnapshotUploadMethod_pushover').trigger('click')">Pushover</span>
+           <br/>
+           <small class="muted">Snapshot images will hosted by Pushover. Only Pushover hosted snapshots will render in the message. All other hosting options will simply be included as a URL in the message body</small>
+        </div>
+        <div id="octoslackRocketChatUploadMethod">
+            <input type="radio" name="octoslackSnapshotUploadMethod"
+            id="octoslackSnapshotUploadMethod_rocketchat"
+            onclick="Octoslack.changeSnapshotUploadMethod(this);"
+            class="octoslack_valign octoslack_checkbox_margin_override" value="ROCKETCHAT">
+            <span class="octoslack_valign octoslack_action_label"
+              onclick="$('#octoslackSnapshotUploadMethod_rocketchat').trigger('click')">Rocket.Chat</span>
+           <br/>
+           <small class="muted">Snapshot images will hosted by Rocket.Chat</small>
         </div>
         <div id="octoslack_imgur_group" class="octoslack_hidden">
             <br/>
@@ -384,7 +515,7 @@
 	    <br/>
 	    <br/>
             <div class="octoprint_config_row">
-                <input type="checkbox" class="octoslack_valign" id="octoslack_minio_secure" data-bind="checked: settings.plugins.Octoslack.minio_config.secure">
+                <input type="checkbox" class="octoslack_valign octoslack_checkbox_margin_override" id="octoslack_minio_secure" data-bind="checked: settings.plugins.Octoslack.minio_config.secure">
                 <div class="octoslack_label octoslack_action_label" onclick="$('#octoslack_minio_secure').trigger('click')">Secure Connection</div>
             </div>
         </div>

@@ -43,6 +43,10 @@ plugin_requires = [
     "minio",
     "netifaces",
     "pytz",
+    "pushbullet.py",
+    "pathlib2",
+    "pushover_complete",
+    "rocket-python",
 ]
 
 ### --------------------------------------------------------------------------------------------------------------------
