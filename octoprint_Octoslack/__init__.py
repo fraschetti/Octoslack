@@ -1664,7 +1664,7 @@ class OctoslackPlugin(
         if connection_method == "WEBHOOK" and self.mattermost_mode():
             return "**", "**", " ", "\n"
         elif connection_method == "WEBHOOK" or connection_method == "APITOKEN":
-            return "*", "**", " ", "\n"
+            return "*", "*", " ", "\n"
         elif connection_method == "PUSHOVER":
             return "<b>", "</b>", " ", "\n"
         elif connection_method == "ROCKETCHAT":
@@ -2582,9 +2582,11 @@ class OctoslackPlugin(
 
         dest_filename = local_file_path[local_file_path.rfind("/") + 1 :]
 
+        self._logger.debug("Upload snapshot - connection_method: " + str(connection_method) + ", snapshot_upload_method: " + str(snapshot_upload_method))
+
         # Return the file object, later logic will actually upload the asset
         if (
-            (connection_method == "SLACKAPI" and snapshot_upload_method == "SLACK")
+            (connection_method == "APITOKEN" and snapshot_upload_method == "SLACK")
             or (
                 connection_method == "PUSHOVER" and snapshot_upload_method == "PUSHOVER"
             )
