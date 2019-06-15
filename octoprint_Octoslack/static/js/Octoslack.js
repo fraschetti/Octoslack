@@ -84,15 +84,8 @@ var Octoslack = {
         var mattermost_enabled = $("#octoslack_mattermost_compatabilty_mode").is(":checked");
 
 	if(mattermost_enabled) {
-		$('#octoslack_connection_type_webhook').trigger('click');
-
-		$('#octoslack_connection_type_apitoken').attr('disabled', 'disabled');
-		$('#octoslack_connection_type_webhook').attr('disabled', 'disabled');
-		
 		$('#octoslack_custom_identity_icon_emoji').attr('disabled', 'disabled');
 	} else {
-		$('#octoslack_connection_type_apitoken').removeAttr('disabled');
-		$('#octoslack_connection_type_webhook').removeAttr('disabled');
 		$('#octoslack_custom_identity_icon_emoji').removeAttr('disabled');
 	}
     },
@@ -230,11 +223,6 @@ var Octoslack = {
         pushbullet_config_section.attr("class", "octoslack_hidden"); 
         pushover_config_section.attr("class", "octoslack_hidden"); 
         rocketchat_config_section.attr("class", "octoslack_hidden"); 
-
-        var mattermost_enabled = $("#octoslack_mattermost_compatabilty_mode").is(":checked");
-	if(mattermost_enabled)
-		new_type = "WEBHOOK";
-        var mattermost_enabled = $("#octoslack_mattermost_compatabilty_mode").is(":checked");
 
         var apiTokenGroup = $("#octoslack_apitoken_group");
         var webhookGroup = $("#octolack_webhook_group");
