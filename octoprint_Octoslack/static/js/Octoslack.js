@@ -56,6 +56,7 @@ var Octoslack = {
         $("#octoslack_imgur_album_id").bind('input propertychange', function() { Octoslack.changeImgurAlbumID(); });
 
         this.changeConnectionType();
+	this.changeSnapshotUploadMethod();
     },
 
     setInitialInputStates : function() {
@@ -300,6 +301,9 @@ var Octoslack = {
     },
 
     changeSnapshotUploadMethod : function(selection) {
+        if (selection === undefined)
+            selection = $("#octoslack_upload_method_hidden").val();
+
         var imgurGroup = $("#octoslack_imgur_group");
         var s3Group = $("#octolack_s3_group");
         var minioGroup = $("#octolack_minio_group");
@@ -308,25 +312,38 @@ var Octoslack = {
         s3Group.attr("class", "octoslack_hidden");
         minioGroup.attr("class", "octoslack_hidden");
 
+	var allow_timelapse_upload = false;
+
+        var upload_timelapse_section = $("#octoslack_upload_timelapse");
+        upload_timelapse_section.attr("class", "octoslack_hidden");
+
         switch (selection.value) {
             case "IMGUR":
                 imgurGroup.attr("class", "octoslack_visible");
                 break;
             case "S3":
                 s3Group.attr("class", "octoslack_visible");
+	        allow_timelapse_upload = true;
                 break;
             case "MINIO":
                 minioGroup.attr("class", "octoslack_visible");
+	        allow_timelapse_upload = true;
                 break;
             case "SLACK":
+	        allow_timelapse_upload = true;
                 break;
             case "PUSHBULLET":
+	        allow_timelapse_upload = true;
                 break;
             case "PUSHOVER":
                 break;
             case "ROCKETCHAT":
                 break;
         }
+
+	$( "div[octoslack_timelapse_upload]" ).each(function() {
+	    $(this).attr("class", allow_timelapse_upload ? "octoprint_config_row octoslack_visible" : "octoprint_config_row octoslack_hidden");
+	});
 
         var upload_method = $("#octoslack_upload_method_hidden");
         upload_method.val(selection.value);
@@ -767,7 +784,7 @@ var Octoslack = {
 
             if(eventType == "STANDARD" && internalName == "MovieDone") {
                 //UploadMovie
-	        eventHtml.push("        <div class='octoprint_config_row'>");
+	        eventHtml.push("        <div class='octoprint_config_row' octoslack_timelapse_upload>");
 	        eventHtml.push("            <input type='checkbox' class='octoslack_valign octoslack_checkbox_margin_override' id='octoslack_event_" + internalName + "_uploadmovie' "
                     + (useDataBind ? "data-bind='checked: settings.plugins.Octoslack.supported_events." + internalName + ".UploadMovie'" : "")
                     + ">");
@@ -775,13 +792,11 @@ var Octoslack = {
 	        eventHtml.push("            <br/>")
 	        eventHtml.push("            <small class='muted'>");
 	        eventHtml.push("                Upload rendered timelapse movie via the configured Snapshot Hosting option. Enabling this option will delay publishing of this event to Slack until after the timelapse has been uploaded.");
-	        eventHtml.push("            <br/>")
-	        eventHtml.push("                NOTE: Imgur does not yet support video uploads across all platforms. See <a href='https://blog.imgur.com/2018/05/29/upload-video-with-sound-on-imgur-for-ios/' target='_blank'>here</a>");
 	        eventHtml.push("            </small>");
 	        eventHtml.push("        </div>");
 
                 //UploadedMovieLink
-	        eventHtml.push("        <div class='octoprint_config_row'>");
+	        eventHtml.push("        <div class='octoprint_config_row' octoslack_timelapse_upload>");
 	        eventHtml.push("            <input type='checkbox' class='octoslack_valign octoslack_checkbox_margin_override' id='octoslack_event_" + internalName + "_uploadmovielink' "
                     + (useDataBind ? "data-bind='checked: settings.plugins.Octoslack.supported_events." + internalName + ".UploadMovieLink'" : "")
                     + ">");

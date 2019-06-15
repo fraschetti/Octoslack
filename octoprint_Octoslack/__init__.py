@@ -2605,6 +2605,12 @@ class OctoslackPlugin(
             if snapshot_upload_method == None or snapshot_upload_method == "NONE":
                 return None, None
 
+            if (
+                snapshot_upload_method == "PUSHOVER"
+                or snapshot_upload_method == "ROCKETCHAT"
+            ):
+                return None, None
+
             error_msgs = []
 
             if snapshot_upload_method == "IMGUR":
