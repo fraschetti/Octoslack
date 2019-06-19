@@ -89,23 +89,36 @@
             <input type="radio" name="octoslack_connection_type" id="octoslack_connection_type_apitoken" onclick="Octoslack.changeConnectionType(this.value);" class="octoslack_valign octoslack_checkbox_margin_override" value="APITOKEN">
             <span class="octoslack_valign octoslack_action_label" onclick="$('#octoslack_connection_type_apitoken').trigger('click')">Slack API Token</span>
         </div>
+	<small class="muted"><a href="https://slack.com/" target="_blank">Slack</a></small>
         <div>
             <input type="radio" name="octoslack_connection_type" id="octoslack_connection_type_webhook" onclick="Octoslack.changeConnectionType(this.value);" class="octoslack_valign octoslack_checkbox_margin_override" value="WEBHOOK">
             <span class="octoslack_valign octoslack_action_label" onclick="$('#octoslack_connection_type_webhook').trigger('click')">Slack/Mattermost WebHook URL</span>
         </div>
-	<small class="muted">Most Slack features will be available for both connection methods but some may specifically require use of the Slack API Token</small>
+	<small class="muted">
+            Most Slack features will be available for both connection methods but some may specifically require use of the Slack API Token
+            </br>
+            <a href="https://slack.com/" target="_blank">Slack</a> or <a href="https://mattermost.com/" target="_blank">Mattermost</a>
+        </small>
         <div>
             <input type="radio" name="octoslack_connection_type" id="octoslack_connection_type_pushbullet" onclick="Octoslack.changeConnectionType(this.value);" class="octoslack_valign octoslack_checkbox_margin_override" value="PUSHBULLET">
             <span class="octoslack_valign octoslack_action_label" onclick="$('#octoslack_connection_type_pushbullet').trigger('click')">Pushbullet</span>
         </div>
+	<small class="muted"><a href="https://www.pushbullet.com/" target="_blank">Pushbullet</a></small>
         <div>
             <input type="radio" name="octoslack_connection_type" id="octoslack_connection_type_pushover" onclick="Octoslack.changeConnectionType(this.value);" class="octoslack_valign octoslack_checkbox_margin_override" value="PUSHOVER">
             <span class="octoslack_valign octoslack_action_label" onclick="$('#octoslack_connection_type_pushover').trigger('click')">Pushover</span>
         </div>
+	<small class="muted"><a href="https://pushover.net/" target="_blank">Pushover</a></small>
         <div>
             <input type="radio" name="octoslack_connection_type" id="octoslack_connection_type_rocketchat" onclick="Octoslack.changeConnectionType(this.value);" class="octoslack_valign octoslack_checkbox_margin_override" value="ROCKETCHAT">
             <span class="octoslack_valign octoslack_action_label" onclick="$('#octoslack_connection_type_rocketchat').trigger('click')">Rocket.Chat</span>
         </div>
+	<small class="muted"><a href="https://rocket.chat/" target="_blank">Rocket.Chat</a></small>
+        <div>
+            <input type="radio" name="octoslack_connection_type" id="octoslack_connection_type_matrix" onclick="Octoslack.changeConnectionType(this.value);" class="octoslack_valign octoslack_checkbox_margin_override" value="MATRIX">
+            <span class="octoslack_valign octoslack_action_label" onclick="$('#octoslack_connection_type_matrix').trigger('click')">Matrix</span>
+        </div>
+	<small class="muted">Any <a href="https://matrix.org/" target="_blank">Matrix</a> compatible service (e.g. <a href="https://riot.im/" target="_blank">Riot</a>)</small>
     </div>
     <br/>
     <div id="octoslack_slack_config_section" class="octoslack_hidden"> <!-- Start Slack config section -->
@@ -199,7 +212,7 @@
             <h3>Slack channel(s)</h3>
             <div class="octoprint_config_row">
                 <div class="octoslack_label">Channel(s)</div>
-                <input type="text" class="octoslack_width_auto" size="60" id="octoslack_channel" data-bind="value: settings.plugins.Octoslack.channel">
+                <input type="text" class="octoslack_width_auto" size="60" id="octoslack_slack_channel" data-bind="value: settings.plugins.Octoslack.channel">
 	        <br/>
 	        <small class="muted">
                     A single channel can be specified or multiple channels can provided via a comma-separated list (channel1,channel2,channel3)
@@ -249,7 +262,7 @@
             <h3>Pushbullet channel(s)</h3>
             <div class="octoprint_config_row">
                 <div class="octoslack_label">Channel(s)</div>
-                <input type="text" class="octoslack_width_auto" size="60" id="pushbullet_channel" data-bind="value: settings.plugins.Octoslack.pushbullet_config.channel">
+                <input type="text" class="octoslack_width_auto" size="60" id="octoslack_pushbullet_channel" data-bind="value: settings.plugins.Octoslack.pushbullet_config.channel">
 	        <br/>
 	        <small class="muted">
                     A single channel can be specified or multiple channels can provided via a comma-separated list (channeltag1,channeltag2,channeltag3). To send a direct message to yourself, <b>$myself$</b> can be used in lieu of a channel tag here and in the event channel overrides
@@ -310,7 +323,7 @@
             <h3>Rocket.Chat channel(s)</h3>
             <div class="octoprint_config_row">
                 <div class="octoslack_label">Channel(s)</div>
-                <input type="text" class="octoslack_width_auto" size="60" id="rocketchat_channel" data-bind="value: settings.plugins.Octoslack.rocketchat_config.channel">
+                <input type="text" class="octoslack_width_auto" size="60" id="octoslack_rocketchat_channel" data-bind="value: settings.plugins.Octoslack.rocketchat_config.channel">
 	        <br/>
 	        <small class="muted">
                     A single channel can be specified or multiple channels can provided via a comma-separated list (channel1,channel2,channel3)
@@ -318,6 +331,45 @@
             </div>
         </div>
     </div> <!-- End Rocket.Chat config section -->
+    <div id="octoslack_matrix_config_section" class="octoslack_hidden"> <!-- Start Matrix config section -->
+        <h2>Matrix configuration</h2>
+        <div class="octoslack_config_group">
+            <br/>
+            <div class="octoprint_config_row">
+                <span class="octoslack_label">Server URL</span>
+                <input type="text" class="octoslack_width_auto" id="octoslack_matrix_server_url" size="60" placeholder="https://matrix.org" data-bind="value: settings.plugins.Octoslack.matrix_config.server_url">
+		</br>
+		<small class="muted">
+                    The Rocket.Chat API authenticates with the username/password in plain text. It is highly reccommended to always connect to your Rocket.Chat server over https
+                </small>
+            </div>
+            <div class="octoprint_config_row">
+                <span class="octoslack_label">Access Token</span>
+                <input type="text" class="octoslack_width_auto" id="octoslack_matrix_access_token" size="60" data-bind="value: settings.plugins.Octoslack.matrix_config.access_token">
+		</br>
+		<small class="muted">
+                    The location of the access token will vary between Matrix implementations. For Riot.im, instructions can be found <a href="https://t2bot.io/docs/access_tokens/" target="_blank">here</a>
+                </small>
+            </div>
+            <div class="octoprint_config_row">
+                <span class="octoslack_label">User ID</span>
+                <input type="text" class="octoslack_width_auto" id="octoslack_matrix_user_id" size="30" placeholder="@userid:domain" data-bind="value: settings.plugins.Octoslack.matrix_config.user_id">
+		</br>
+		<small class="muted">
+                    The location of the user id will vary between Matrix implementations but it will always start with an at sign <b>@</b>
+                </small>
+            </div>
+            <h3>Matrix room(s)</h3>
+            <div class="octoprint_config_row">
+                <div class="octoslack_label">Room(s)</div>
+                <input type="text" class="octoslack_width_auto" size="60" id="octoslack_matrix_channel" placeholder="!roomid:domain" data-bind="value: settings.plugins.Octoslack.matrix_config.channel">
+	        <br/>
+	        <small class="muted">
+                    A single room can be specified or multiple rooms can provided via a comma-separated list (roomid1:domain,roomid2:domain,roomid3:domain). The location of the room id will vary between Matrix implementations but it will always start with an exclamation point <b>!</b>
+                </small>
+            </div>
+        </div>
+    </div> <!-- End Matrix config section -->
     <br/>
     <h2>Snapshots</h2>
     <div class="octoslack_config_group">
@@ -365,7 +417,7 @@
             <span class="octoslack_valign octoslack_action_label"
               onclick="$('#octoslackSnapshotUploadMethod_pushbullet').trigger('click')">Pushbullet</span>
            <br/>
-           <small class="muted">Snapshot images will hosted by Pushbullet</small>
+           <small class="muted">Snapshot images will hosted by <a href="https://www.pushbullet.com/" target="_blank">Pushbullet</a></small>
         </div>
         <div id="octoslackPushoverUploadMethod">
             <input type="radio" name="octoslackSnapshotUploadMethod"
@@ -375,7 +427,7 @@
             <span class="octoslack_valign octoslack_action_label"
               onclick="$('#octoslackSnapshotUploadMethod_pushover').trigger('click')">Pushover</span>
            <br/>
-           <small class="muted">Snapshot images will hosted by Pushover. Only Pushover hosted snapshots will render in the message. All other hosting options will simply be included as a URL in the message body</small>
+           <small class="muted">Snapshot images will hosted by <a href="https://pushover.net/" target="_blank">Pushover</a>. Only Pushover hosted snapshots will render in the message. All other hosting options will simply be included as a URL in the message body</small>
         </div>
         <div id="octoslackRocketChatUploadMethod">
             <input type="radio" name="octoslackSnapshotUploadMethod"
@@ -385,7 +437,17 @@
             <span class="octoslack_valign octoslack_action_label"
               onclick="$('#octoslackSnapshotUploadMethod_rocketchat').trigger('click')">Rocket.Chat</span>
            <br/>
-           <small class="muted">Snapshot images will hosted by Rocket.Chat</small>
+           <small class="muted">Snapshot images will hosted by <a href="https://rocket.chat/" target="_blank">Rocket.Chat</a></small>
+        </div>
+        <div id="octoslackMatrixUploadMethod">
+            <input type="radio" name="octoslackSnapshotUploadMethod"
+            id="octoslackSnapshotUploadMethod_matrix"
+            onclick="Octoslack.changeSnapshotUploadMethod(this);"
+            class="octoslack_valign octoslack_checkbox_margin_override" value="MATRIX">
+            <span class="octoslack_valign octoslack_action_label"
+              onclick="$('#octoslackSnapshotUploadMethod_matrix').trigger('click')">Matrix</span>
+           <br/>
+           <small class="muted">Snapshot images will hosted by the <a href="https://matrix.org/" target="_blank">Matrix</a> server. Only Matrix hosted snapshots will render in the message. All other hosting options will simply be included as a URL in the message body</small>
         </div>
         <div id="octoslack_imgur_group" class="octoslack_hidden">
             <br/>

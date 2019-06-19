@@ -1,6 +1,7 @@
 # coding=utf-8
 # encoding: utf-8
 from __future__ import absolute_import
+from octoprint.util.version import get_octoprint_version_string
 from tempfile import mkstemp
 from datetime import timedelta
 from slackclient import SlackClient
@@ -10,6 +11,8 @@ from imgurpython.helpers.error import ImgurClientError, ImgurClientRateLimitErro
 from pushbullet import Pushbullet
 from pushover_complete import PushoverAPI
 from rocketchat.api import RocketChatAPI
+from matrix_client.client import MatrixClient
+from matrix_client.client import Room as MatrixRoom
 from PIL import Image
 from octoprint.util import RepeatedTimer
 from websocket import WebSocketConnectionClosedException
@@ -65,7 +68,7 @@ class OctoslackPlugin(
 
     def get_settings_defaults(self):
         return {
-            "connection_method": "APITOKEN",  ##APITOKEN, WEBHOOK, PUSHBULLET, PUSHOVER, ROCKETCHAT
+            "connection_method": "APITOKEN",
             "slack_apitoken_config": {
                 "api_token": "",
                 "enable_commands": True,
@@ -89,10 +92,16 @@ class OctoslackPlugin(
                 "password": "",
                 "channel": "",
             },
+            "matrix_config": {
+                "server_url": "",
+                "access_token": "",
+                "user_id": "",
+                "channel": "",
+            },
             "ignore_cancel_fail_event": True,
             "mattermost_compatability_mode": False,
             "include_raspi_temp": True,
-            "snapshot_upload_method": "NONE",  ##NONE, S3 or IMGUR
+            "snapshot_upload_method": "NONE",
             "imgur_config": {
                 "client_id": "",
                 "client_secret": "",
@@ -126,6 +135,7 @@ class OctoslackPlugin(
                     "Color": "good",
                     "CaptureSnapshot": False,
                     "ReportPrinterState": True,
+                    "ReportEnvironment": False,
                     "ReportJobState": False,
                     "ReportJobOrigEstimate": False,
                     "ReportJobProgress": False,
@@ -143,6 +153,7 @@ class OctoslackPlugin(
                     "Color": "good",
                     "CaptureSnapshot": False,
                     "ReportPrinterState": True,
+                    "ReportEnvironment": True,
                     "ReportJobState": False,
                     "ReportJobOrigEstimate": False,
                     "ReportJobProgress": False,
@@ -159,6 +170,7 @@ class OctoslackPlugin(
                     "Color": "good",
                     "CaptureSnapshot": False,
                     "ReportPrinterState": True,
+                    "ReportEnvironment": False,
                     "ReportJobState": False,
                     "ReportJobOrigEstimate": False,
                     "ReportJobProgress": False,
@@ -175,6 +187,7 @@ class OctoslackPlugin(
                     "Color": "good",
                     "CaptureSnapshot": False,
                     "ReportPrinterState": True,
+                    "ReportEnvironment": False,
                     "ReportJobState": False,
                     "ReportJobOrigEstimate": False,
                     "ReportJobProgress": False,
@@ -191,6 +204,7 @@ class OctoslackPlugin(
                     "Color": "good",
                     "CaptureSnapshot": False,
                     "ReportPrinterState": True,
+                    "ReportEnvironment": False,
                     "ReportJobState": False,
                     "ReportJobOrigEstimate": False,
                     "ReportJobProgress": False,
@@ -207,6 +221,7 @@ class OctoslackPlugin(
                     "Color": "warning",
                     "CaptureSnapshot": False,
                     "ReportPrinterState": True,
+                    "ReportEnvironment": False,
                     "ReportJobState": False,
                     "ReportJobOrigEstimate": False,
                     "ReportJobProgress": False,
@@ -223,6 +238,7 @@ class OctoslackPlugin(
                     "Color": "danger",
                     "CaptureSnapshot": False,
                     "ReportPrinterState": True,
+                    "ReportEnvironment": False,
                     "ReportJobState": False,
                     "ReportJobOrigEstimate": False,
                     "ReportJobProgress": False,
@@ -239,6 +255,7 @@ class OctoslackPlugin(
                     "Color": "danger",
                     "CaptureSnapshot": True,
                     "ReportPrinterState": True,
+                    "ReportEnvironment": False,
                     "ReportJobState": False,
                     "ReportJobOrigEstimate": False,
                     "ReportJobProgress": False,
@@ -255,6 +272,7 @@ class OctoslackPlugin(
                     "Color": "good",
                     "CaptureSnapshot": True,
                     "ReportPrinterState": True,
+                    "ReportEnvironment": False,
                     "ReportJobState": True,
                     "ReportJobOrigEstimate": True,
                     "ReportJobProgress": False,
@@ -271,6 +289,7 @@ class OctoslackPlugin(
                     "Color": "danger",
                     "CaptureSnapshot": True,
                     "ReportPrinterState": True,
+                    "ReportEnvironment": False,
                     "ReportJobState": True,
                     "ReportJobOrigEstimate": False,
                     "ReportJobProgress": False,
@@ -287,6 +306,7 @@ class OctoslackPlugin(
                     "Color": "warning",
                     "CaptureSnapshot": True,
                     "ReportPrinterState": True,
+                    "ReportEnvironment": False,
                     "ReportJobState": True,
                     "ReportJobOrigEstimate": False,
                     "ReportJobProgress": False,
@@ -303,6 +323,7 @@ class OctoslackPlugin(
                     "Color": "good",
                     "CaptureSnapshot": True,
                     "ReportPrinterState": True,
+                    "ReportEnvironment": False,
                     "ReportJobState": True,
                     "ReportJobOrigEstimate": True,
                     "ReportJobProgress": False,
@@ -320,6 +341,7 @@ class OctoslackPlugin(
                     "Color": "good",
                     "CaptureSnapshot": True,
                     "ReportPrinterState": True,
+                    "ReportEnvironment": False,
                     "ReportJobState": True,
                     "ReportJobOrigEstimate": False,
                     "ReportJobProgress": True,
@@ -342,6 +364,7 @@ class OctoslackPlugin(
                     "Color": "good",  ##Hardcoded to 'good' for now
                     "CaptureSnapshot": False,  ##Overwritten by each event
                     "ReportPrinterState": True,
+                    "ReportEnvironment": False,
                     "ReportJobState": True,
                     "ReportJobOrigEstimate": False,
                     "ReportJobProgress": True,
@@ -358,6 +381,7 @@ class OctoslackPlugin(
                     "Color": "good",  ##Color may be updated in process_slack_event
                     "CaptureSnapshot": False,
                     "ReportPrinterState": True,
+                    "ReportEnvironment": False,
                     "ReportJobState": False,
                     "ReportJobOrigEstimate": False,
                     "ReportJobProgress": False,
@@ -374,6 +398,7 @@ class OctoslackPlugin(
                     "Color": "warning",
                     "CaptureSnapshot": True,
                     "ReportPrinterState": True,
+                    "ReportEnvironment": False,
                     "ReportJobState": True,
                     "ReportJobOrigEstimate": True,
                     "ReportJobProgress": True,
@@ -389,6 +414,7 @@ class OctoslackPlugin(
                     "Color": "good",
                     "CaptureSnapshot": True,
                     "ReportPrinterState": True,
+                    "ReportEnvironment": False,
                     "ReportJobState": True,
                     "ReportJobOrigEstimate": True,
                     "ReportJobProgress": True,
@@ -404,6 +430,7 @@ class OctoslackPlugin(
                     "Color": "good",
                     "CaptureSnapshot": False,
                     "ReportPrinterState": True,
+                    "ReportEnvironment": False,
                     "ReportJobState": False,
                     "ReportJobOrigEstimate": False,
                     "ReportJobProgress": False,
@@ -419,6 +446,7 @@ class OctoslackPlugin(
                     "Color": "good",
                     "CaptureSnapshot": False,
                     "ReportPrinterState": True,
+                    "ReportEnvironment": False,
                     "ReportJobState": False,
                     "ReportJobOrigEstimate": False,
                     "ReportJobProgress": False,
@@ -436,6 +464,7 @@ class OctoslackPlugin(
                     "Color": "danger",
                     "CaptureSnapshot": False,
                     "ReportPrinterState": True,
+                    "ReportEnvironment": False,
                     "ReportJobState": False,
                     "ReportJobOrigEstimate": False,
                     "ReportJobProgress": False,
@@ -459,6 +488,7 @@ class OctoslackPlugin(
                 ["pushover_config", "app_token"],
                 ["rocketchat_config", "username"],
                 ["rocketchat_config", "password"],
+                ["matrix_config", "access_token"],
                 ["s3_config", "AWSAccessKey"],
                 ["s3_config", "AWSsecretKey"],
                 ["s3_config", "s3Bucket"],
@@ -854,6 +884,7 @@ class OctoslackPlugin(
         footer = ""
         includeSnapshot = False
         reportPrinterState = False
+        reportEnvironment = False
         reportJobState = False
         reportJobOrigEstimate = False
         reportJobProgress = False
@@ -878,6 +909,8 @@ class OctoslackPlugin(
             includeSnapshot = event_settings["CaptureSnapshot"]
         if "ReportPrinterState" in event_settings:
             reportPrinterState = event_settings["ReportPrinterState"]
+        if "ReportEnvironment" in event_settings:
+            reportEnvironment = event_settings["ReportEnvironment"]
         if "ReportJobState" in event_settings:
             reportJobState = event_settings["ReportJobState"]
         if "ReportJobOrigEstimate" in event_settings:
@@ -1120,6 +1153,13 @@ class OctoslackPlugin(
                     footer += ", "
 
                 footer += "RasPi: " + rpi_tmp + unichr(176) + "C"
+
+        if reportEnvironment:
+            if len(footer) > 0:
+                footer += ", "
+
+            footer += "OctoPrint: " + get_octoprint_version_string()
+            footer += ", " + self._plugin_name + ": v" + self._plugin_version
 
         final_time = "N/A"
         if event == "PrintDone" and "time" in event_payload:
@@ -1669,6 +1709,8 @@ class OctoslackPlugin(
             return "<b>", "</b>", " ", "\n"
         elif connection_method == "ROCKETCHAT":
             return "*", "*", " ", "\n"
+        elif connection_method == "MATRIX":
+            return "<b>", "</b>", " ", "<br/>\n"
 
         return "", "", ": ", "\n"
 
@@ -1823,6 +1865,9 @@ class OctoslackPlugin(
             rocketChatServerURL = None
             rocketChatUsername = None
             rocketChatPassword = None
+            marixServerURL = None
+            matrixAccessToken = None
+            matrixUserID = None
 
             bold_text_start, bold_text_end, name_val_sep, newline = (
                 self.get_formatting_elements()
@@ -1914,6 +1959,35 @@ class OctoslackPlugin(
                         "Rocket.Chat connection not available, skipping message send"
                     )
                     return
+                    return
+            elif connection_method == "MATRIX":
+                matrixServerURL = self._settings.get(
+                    ["matrix_config"], merged=True
+                ).get("server_url")
+                matrixAccessToken = self._settings.get(
+                    ["matrix_config"], merged=True
+                ).get("access_token")
+                matrixUserID = self._settings.get(["matrix_config"], merged=True).get(
+                    "user_id"
+                )
+                if not matrixServerURL == None:
+                    matrixServerURL = matrixServerURL.strip()
+                if not matrixAccessToken == None:
+                    matrixAccessToken = matrixAccessToken.strip()
+                if not matrixUserID == None:
+                    matrixUserID = matrixUserID.strip()
+
+                if (
+                    matrixServerURL == None
+                    or len(matrixServerURL) == 0
+                    or matrixAccessToken == None
+                    or len(matrixAccessToken) == 0
+                    or matrixUserID == None
+                    or len(matrixUserID) == 0
+                ):
+                    self._logger.error(
+                        "Matrix connection not available, skipping message send"
+                    )
 
             attachments = [{}]
             attachment = attachments[0]
@@ -1988,6 +2062,10 @@ class OctoslackPlugin(
                             or (
                                 connection_method == "ROCKETCHAT"
                                 and snapshot_upload_method == "ROCKETCHAT"
+                            )
+                            or (
+                                connection_method == "MATRIX"
+                                and snapshot_upload_method == "MATRIX"
                             )
                         ):
                             snapshot_url_to_append = None
@@ -2077,6 +2155,10 @@ class OctoslackPlugin(
                     channels = self._settings.get(
                         ["rocketchat_config"], merged=True
                     ).get("channel")
+                elif connection_method == "MATRIX":
+                    channels = self._settings.get(["matrix_config"], merged=True).get(
+                        "channel"
+                    )
 
             if not channels:
                 channels = ""
@@ -2563,6 +2645,80 @@ class OctoslackPlugin(
                             + str(rc_image_local_path)
                         )
                         os.remove(rc_image_local_path)
+                elif (
+                    not matrixServerURL == None
+                    and len(matrixServerURL) > 0
+                    and not matrixAccessToken == None
+                    and len(matrixAccessToken) > 0
+                    and not matrixUserID == None
+                    and len(matrixUserID) > 0
+                ):
+                    self._logger.debug("Send Matrix msg start")
+
+                    ##https://matrix.org/docs/spec/client_server/latest#m-room-message-msgtypes
+
+                    try:
+                        ##Room def send_html(self, html, body=None, msgtype="m.text"):
+
+                        matrix = MatrixClient(
+                            base_url=matrixServerURL,
+                            token=matrixAccessToken,
+                            user_id=matrixUserID,
+                        )
+                        self._logger.debug(
+                            "Matrix authenticated user_id: " + str(matrix.user_id)
+                        )
+                        matrix_msg = ""
+
+                        if not pretext == None and len(pretext) > 0:
+                            matrix_msg = matrix_msg + "<h3>" + pretext + "</h3>"
+                            ##matrix_msg = matrix_msg + "<i><b>" + pretext + "</b><i>"
+
+                        matrix_msg = matrix_msg + "<blockquote>"
+
+                        if not text == None and len(text) > 0:
+                            if len(matrix_msg) > 0 and not matrix_msg.endswith(
+                                "<blockquote>"
+                            ):
+                                matrix_msg = matrix_msg + "<br/>\n"
+                            matrix_msg = matrix_msg + text
+
+                        if not footer == None and len(footer) > 0:
+                            if len(matrix_msg) > 0 and not matrix_msg.endswith(
+                                "<blockquote>"
+                            ):
+                                matrix_msg = matrix_msg + "<br/>\n"
+                            matrix_msg = matrix_msg + footer
+
+                        mxc_url = None
+
+                        if (
+                            hosted_url
+                            and len(hosted_url) > 0
+                            and snapshot_upload_method == "MATRIX"
+                        ):
+                            if len(matrix_msg) > 0 and not matrix_msg.endswith(
+                                "<blockquote>"
+                            ):
+                                matrix_msg = matrix_msg + "<br/>\n"
+
+                            matrix_msg = matrix_msg + "<img src='" + hosted_url + "'>"
+
+                        if len(matrix_msg) > 0:
+                            matrix_msg = matrix_msg + "<br/>\n"
+
+                        matrix_msg = matrix_msg + "</blockquote><br/>"
+
+                        self._logger.debug("Matrix msg: " + matrix_msg)
+
+                        matrix_room = MatrixRoom(matrix, channel)
+                        matrix_rsp = matrix_room.send_html(html=matrix_msg)
+
+                        self._logger.debug(
+                            "Matrix send message response: " + json.dumps(matrix_rsp)
+                        )
+                    except Exception as e:
+                        self._logger.exception("Matrix send error: " + str(e))
 
         except Exception as e:
             self._logger.exception("Send message error: " + str(e))
@@ -2573,6 +2729,9 @@ class OctoslackPlugin(
         snapshot_upload_method = self._settings.get(
             ["snapshot_upload_method"], merged=True
         )
+        self._logger.debug(
+            "Upload snapshot - snapshot_upload_method: " + snapshot_upload_method
+        )
         if snapshot_upload_method == None or snapshot_upload_method == "NONE":
             return None, None, None
 
@@ -2582,7 +2741,12 @@ class OctoslackPlugin(
 
         dest_filename = local_file_path[local_file_path.rfind("/") + 1 :]
 
-        self._logger.debug("Upload snapshot - connection_method: " + str(connection_method) + ", snapshot_upload_method: " + str(snapshot_upload_method))
+        self._logger.debug(
+            "Upload snapshot - connection_method: "
+            + str(connection_method)
+            + ", snapshot_upload_method: "
+            + snapshot_upload_method
+        )
 
         # Return the file object, later logic will actually upload the asset
         if (
@@ -2610,6 +2774,7 @@ class OctoslackPlugin(
             if (
                 snapshot_upload_method == "PUSHOVER"
                 or snapshot_upload_method == "ROCKETCHAT"
+                or snapshot_upload_method == "MATRIX"
             ):
                 return None, None
 
@@ -2954,7 +3119,7 @@ class OctoslackPlugin(
                                     )
                                 except Exception as e:
                                     self._logger.exception(
-                                        "Error while uploading snapshot, sending only a note: {}".format(
+                                        "Error while uploading snapshot to Pushbullet, sending only a note: {}".format(
                                             str(e)
                                         )
                                     )
@@ -2967,6 +3132,87 @@ class OctoslackPlugin(
                             "Failed to upload asset to Pushbullet: " + str(e)
                         )
                         error_msgs.append("Pushbullet error: " + str(e))
+                elif (
+                    connection_method == "MATRIX" and snapshot_upload_method == "MATRIX"
+                ):
+                    try:
+                        self._logger.debug("Uploading asset via Matrix")
+
+                        matrix_upload_start = time.time()
+
+                        matrixServerURL = self._settings.get(
+                            ["matrix_config"], merged=True
+                        ).get("server_url")
+                        matrixAccessToken = self._settings.get(
+                            ["matrix_config"], merged=True
+                        ).get("access_token")
+                        matrixUserID = self._settings.get(
+                            ["matrix_config"], merged=True
+                        ).get("user_id")
+
+                        if not matrixServerURL == None:
+                            matrixServerURL = matrixServerURL.strip()
+                        if not matrixAccessToken == None:
+                            matrixAccessToken = matrixAccessToken.strip()
+                        if not matrixUserID == None:
+                            matrixUserID = matrixUserID.strip()
+
+                        matrix_rsp = None
+
+                        if (
+                            matrixServerURL == None
+                            or len(matrixServerURL) == 0
+                            or matrixAccessToken == None
+                            or len(matrixAccessToken) == 0
+                            or matrixUserID == None
+                            or len(matrixUserID) == 0
+                        ):
+                            self._logger.error(
+                                "Matrix connection not available, skipping asset upload"
+                            )
+                        else:
+                            matrix = MatrixClient(
+                                base_url=matrixServerURL,
+                                token=matrixAccessToken,
+                                user_id=matrixUserID,
+                            )
+                            self._logger.debug(
+                                "Matrix authenticated user_id: " + str(matrix.user_id)
+                            )
+
+                            with open(local_file_path, "rb") as img_file:
+                                try:
+                                    img_bytes = img_file.read()
+                                    matrix_rsp = matrix.upload(
+                                        content=img_bytes, content_type="image/png"
+                                    )
+                                    self._logger.debug(
+                                        "Matrix upload response: "
+                                        + json.dumps(matrix_rsp)
+                                    )
+
+                                    matrix_upload_elapsed = (
+                                        time.time() - matrix_upload_start
+                                    )
+                                    self._logger.debug(
+                                        "Uploaded asset to Matrix in "
+                                        + str(round(matrix_upload_elapsed, 2))
+                                        + " seconds"
+                                    )
+
+                                    return matrix_rsp, error_msgs, None
+                                except Exception as e:
+                                    self._logger.exception(
+                                        "Error while uploading snapshot to Matrix, sending only a note: {}".format(
+                                            str(e)
+                                        )
+                                    )
+                                    error_msgs.append("Matrix error: " + str(e))
+                    except Exception as e:
+                        self._logger.exception(
+                            "Failed to upload asset to Matrix: " + str(e)
+                        )
+                        error_msgs.append("Matrix error: " + str(e))
             except Exception as e:
                 self._logger.exception("Asset upload error: %s" % str(e))
                 error_msgs.append(str(e.message))

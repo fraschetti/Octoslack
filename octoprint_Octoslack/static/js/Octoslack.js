@@ -69,9 +69,12 @@ var Octoslack = {
 	this.toggleUseSlackIdentity(slack_identity_check);
 
 	var upload_method = $("#octoslack_upload_method_hidden").val();
-        var upload_method_radio = $("input[name=octoslackSnapshotUploadMethod][value=" + upload_method + "]");
-	upload_method_radio.attr('checked', 'checked');
-        upload_method_radio.trigger('click');
+
+	if(upload_method !== undefined && upload_method.length > 0) {
+            var upload_method_radio = $("input[name=octoslackSnapshotUploadMethod][value=" + upload_method + "]");
+	    upload_method_radio.attr('checked', 'checked');
+            upload_method_radio.trigger('click');
+	}
 
 	var s3_retention = $("#octoslack_s3_retention");
 	if (s3_retention.val() <= 0) {
@@ -154,7 +157,7 @@ var Octoslack = {
 
     afterSettingsSaved : function() {
 	var new_connection_method = $("#octoslack_connection_method_hidden").val();
-	var new_channel = $("#octoslack_channel").val();
+	var new_channel = $("#octoslack_slack_channel").val();
 
 	if(new_connection_method == "APITOKEN" && new_channel.trim().length == 0) {
 		var title = "Required Octoslack field not populated";
@@ -218,11 +221,13 @@ var Octoslack = {
         var pushbullet_config_section = $("#octoslack_pushbullet_config_section");
         var pushover_config_section = $("#octoslack_pushover_config_section");
         var rocketchat_config_section = $("#octoslack_rocketchat_config_section");
+        var matrix_config_section = $("#octoslack_matrix_config_section");
 
         slack_config_section.attr("class", "octoslack_hidden");
         pushbullet_config_section.attr("class", "octoslack_hidden"); 
         pushover_config_section.attr("class", "octoslack_hidden"); 
         rocketchat_config_section.attr("class", "octoslack_hidden"); 
+        matrix_config_section.attr("class", "octoslack_hidden"); 
 
         var apiTokenGroup = $("#octoslack_apitoken_group");
         var webhookGroup = $("#octolack_webhook_group");
@@ -231,6 +236,7 @@ var Octoslack = {
 	var pushbulletUploadOption = $("#octoslackPushbulletUploadMethod");
 	var pushoverUploadOption = $("#octoslackPushoverUploadMethod");
 	var rocketChatUploadOption = $("#octoslackRocketChatUploadMethod");
+	var matrixUploadOption = $("#octoslackMatrixUploadMethod");
 
         apiTokenGroup.attr("class", "octoslack_hidden");
         webhookGroup.attr("class", "octoslack_hidden");
@@ -239,6 +245,7 @@ var Octoslack = {
         pushbulletUploadOption.attr("class", "octoslack_hidden"); 
         pushoverUploadOption.attr("class", "octoslack_hidden"); 
         rocketChatUploadOption.attr("class", "octoslack_hidden"); 
+        matrixUploadOption.attr("class", "octoslack_hidden"); 
 
 
         switch (new_type) {
@@ -262,6 +269,10 @@ var Octoslack = {
            case "ROCKETCHAT":
                 rocketchat_config_section.attr("class", "octoslack_visible");
                 rocketChatUploadOption.attr("class", "octoslack_visible");
+                break;
+           case "MATRIX":
+                matrix_config_section.attr("class", "octoslack_visible");
+                matrixUploadOption.attr("class", "octoslack_visible");
                 break;
         }
 
@@ -291,6 +302,8 @@ var Octoslack = {
     changeSnapshotUploadMethod : function(selection) {
         if (selection === undefined)
             selection = $("#octoslack_upload_method_hidden").val();
+	else
+            selection = selection.value
 
         var imgurGroup = $("#octoslack_imgur_group");
         var s3Group = $("#octolack_s3_group");
@@ -305,7 +318,7 @@ var Octoslack = {
         var upload_timelapse_section = $("#octoslack_upload_timelapse");
         upload_timelapse_section.attr("class", "octoslack_hidden");
 
-        switch (selection.value) {
+        switch (selection) {
             case "IMGUR":
                 imgurGroup.attr("class", "octoslack_visible");
                 break;
@@ -327,6 +340,8 @@ var Octoslack = {
                 break;
             case "ROCKETCHAT":
                 break;
+            case "MATRIX":
+                break;
         }
 
 	$( "div[octoslack_timelapse_upload]" ).each(function() {
@@ -334,7 +349,7 @@ var Octoslack = {
 	});
 
         var upload_method = $("#octoslack_upload_method_hidden");
-        upload_method.val(selection.value);
+        upload_method.val(selection);
         upload_method.trigger('change');
 
         Octoslack.applySlackUploadChanges();
