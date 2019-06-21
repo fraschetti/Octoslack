@@ -442,6 +442,7 @@ var Octoslack = {
 	var events = [
 		{ "InternalName" : "PrintStarted", "DisplayName" : "Print started" },
 		{ "InternalName" : "PrintFailed", "DisplayName" : "Print failed" },
+		{ "InternalName" : "PrintCancelling", "DisplayName" : "Print cancelling" },
 		{ "InternalName" : "PrintCancelled", "DisplayName" : "Print cancelled" },
 		{ "InternalName" : "PrintPaused", "DisplayName" : "Print paused" },
 		{ "InternalName" : "PrintResumed", "DisplayName" : "Print resumed" },
@@ -458,6 +459,8 @@ var Octoslack = {
 		{ "InternalName" : "Connected", "DisplayName" : "Printer connected" },
 		{ "InternalName" : "Disconnecting", "DisplayName" : "Printer disconnecting" },
 		{ "InternalName" : "Disconnected", "DisplayName" : "Printer disconnected" },
+		{ "InternalName" : "MetadataAnalysisStarted", "DisplayName" : "File metadata analysis started" },
+		{ "InternalName" : "MetadataAnalysisFinished", "DisplayName" : "File metadata analysis completed" },
 	];
 
 	var eventsHtml = this.buildOctoPrintEventConfigRow('STANDARD', events, null, null);

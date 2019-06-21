@@ -298,6 +298,23 @@ class OctoslackPlugin(
                     "PushoverSound": "pushover",
                     "PushoverPriority": 0,
                 },
+                "PrintCancelling": {
+                    "Enabled": True,
+                    "ChannelOverride": "",
+                    "Message": ":heavy_minus_sign:  Print is being cancelled :no_good:",
+                    "Fallback": "Print is being cancelled: {print_name}",
+                    "Color": "warning",
+                    "CaptureSnapshot": True,
+                    "ReportPrinterState": True,
+                    "ReportEnvironment": False,
+                    "ReportJobState": True,
+                    "ReportJobOrigEstimate": False,
+                    "ReportJobProgress": True,
+                    "ReportFinalPrintTime": False,
+                    "ReportMovieStatus": False,
+                    "PushoverSound": "pushover",
+                    "PushoverPriority": 0,
+                },
                 "PrintCancelled": {
                     "Enabled": True,
                     "ChannelOverride": "",
@@ -418,6 +435,38 @@ class OctoslackPlugin(
                     "ReportJobState": True,
                     "ReportJobOrigEstimate": True,
                     "ReportJobProgress": True,
+                    "ReportMovieStatus": False,
+                    "PushoverSound": "pushover",
+                    "PushoverPriority": 0,
+                },
+                "MetadataAnalysisStarted": {
+                    "Enabled": False,
+                    "ChannelOverride": "",
+                    "Message": ":heavy_minus_sign:  File analysis started :runner:",
+                    "Fallback": "File metadata analysis started: {print_name}",
+                    "Color": "good",
+                    "CaptureSnapshot": False,
+                    "ReportPrinterState": False,
+                    "ReportEnvironment": False,
+                    "ReportJobState": False,
+                    "ReportJobOrigEstimate": False,
+                    "ReportJobProgress": False,
+                    "ReportMovieStatus": False,
+                    "PushoverSound": "pushover",
+                    "PushoverPriority": 0,
+                },
+                "MetadataAnalysisFinished": {
+                    "Enabled": False,
+                    "ChannelOverride": "",
+                    "Message": ":heavy_minus_sign:  File analysis complete :ok_hand:",
+                    "Fallback": "File metadata analysis complete: {print_name}",
+                    "Color": "good",
+                    "CaptureSnapshot": False,
+                    "ReportPrinterState": False,
+                    "ReportEnvironment": False,
+                    "ReportJobState": False,
+                    "ReportJobOrigEstimate": False,
+                    "ReportJobProgress": False,
                     "ReportMovieStatus": False,
                     "PushoverSound": "pushover",
                     "PushoverPriority": 0,
@@ -835,6 +884,15 @@ class OctoslackPlugin(
                 if self.process_zheight_change(payload):
                     self.handle_event("Progress", None, payload, False, None)
                 return
+            elif event == "MetadataAnalysisFinished":
+                ##If using OctoPrint-PrintTimeGenius, don't register the finished event until its actually done
+                if payload and "result" in payload:
+                    analysis_result = payload["result"]
+                    if (
+                        "analysisPending" in analysis_result
+                        and analysis_result["analysisPending"]
+                    ):
+                        return
 
             supported_events = self._settings.get(["supported_events"], merged=True)
             if supported_events == None or not event in supported_events:
@@ -870,6 +928,16 @@ class OctoslackPlugin(
             self._logger.exception(
                 "Error processing event: " + event + ", Error: " + str(e.message)
             )
+
+    def get_origin_text(self, print_origin):
+        if print_origin == "local":
+            return "OctoPrint"
+        elif print_origin == "sdcard":
+            return "SD Card"
+        elif print_origin == None:
+            return "N/A"
+
+        return print_origin
 
     def process_slack_event(
         self, event, event_settings, channel_override, event_payload
@@ -946,6 +1014,72 @@ class OctoslackPlugin(
         file_name = job_state["file"]["name"]
         if file_name == None:
             file_name = "N/A"
+
+        ##Override the print_name variable for the analysis events
+        if event == "MetadataAnalysisStarted" or event == "MetadataAnalysisFinished":
+            if "name" in event_payload:
+                file_name = event_payload["name"]
+            else:
+                file_name = "N/A"
+
+            print_origin = "N/A"
+            if "origin" in event_payload:
+                print_origin = self.get_origin_text(event_payload["origin"])
+
+            fileStr = file_name + " (via " + print_origin + ")"
+
+            text_arr.append(
+                bold_text_start + "File" + bold_text_end + name_val_sep + fileStr
+            )
+
+        if event == "MetadataAnalysisFinished":
+            estimated_print_time = "N/A"
+            analysis_print_time = None
+            compensated_print_time = None
+
+            if "result" in event_payload:
+                analysis_result = event_payload["result"]
+
+                if "estimatedPrintTime" in analysis_result:
+                    estimated_print_time = self.format_duration(
+                        analysis_result["estimatedPrintTime"]
+                    )
+
+                if "analysisPrintTime" in analysis_result:
+                    analysis_print_time = self.format_duration(
+                        analysis_result["analysisPrintTime"]
+                    )
+
+                if "compensatedPrintTime" in analysis_result:
+                    compensated_print_time = self.format_duration(
+                        analysis_result["compensatedPrintTime"]
+                    )
+
+            if analysis_print_time and compensated_print_time:
+                text_arr.append(
+                    bold_text_start
+                    + "Analyzed print time estimate"
+                    + bold_text_end
+                    + name_val_sep
+                    + analysis_print_time
+                )
+
+                text_arr.append(
+                    bold_text_start
+                    + "Compensated print time estimate"
+                    + bold_text_end
+                    + name_val_sep
+                    + compensated_print_time
+                )
+            else:
+                text_arr.append(
+                    bold_text_start
+                    + "Estimated print time"
+                    + bold_text_end
+                    + name_val_sep
+                    + estimated_print_time
+                )
+
         replacement_params["{print_name}"] = file_name
 
         z_height_str = ""
@@ -967,12 +1101,7 @@ class OctoslackPlugin(
 
         if reportJobState:
             print_origin = job_state["file"]["origin"]
-            if print_origin == "local":
-                print_origin = "OctoPrint"
-            elif print_origin == "sdcard":
-                print_origin = "SD Card"
-            elif print_origin == None:
-                print_origin = "N/A"
+            print_origin = self.get_origin_text(print_origin)
 
             file_bytes = job_state["file"]["size"]
             if file_bytes == None:
