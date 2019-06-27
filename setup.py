@@ -42,6 +42,7 @@ plugin_requires = [
     "humanize",
     "minio",
     "netifaces",
+    "sarge",
     "pytz",
     "pushbullet.py",
     "pathlib2",

@@ -17,11 +17,13 @@ from PIL import Image
 from octoprint.util import RepeatedTimer
 from websocket import WebSocketConnectionClosedException
 from minio import Minio
+from sarge import run, Capture, shell_quote
 import octoprint.util
 import octoprint.plugin
 import urllib2
 import datetime
 import base64
+import Queue
 import json
 import os
 import os.path
@@ -36,12 +38,12 @@ import threading
 import requests
 import math
 import re
-import subprocess
 import copy
 import netifaces
 import pytz
 
 SLACKER_TIMEOUT = 60
+COMMAND_EXECUTION_WAIT = 10
 
 
 class OctoslackPlugin(
@@ -144,6 +146,10 @@ class OctoslackPlugin(
                     "IncludeSupportedCommands": True,
                     "PushoverSound": "pushover",
                     "PushoverPriority": 0,
+                    "CommandEnabled": False,
+                    "CaptureCommandReturnCode": False,
+                    "CaptureCommandOutput": False,
+                    "Command": "",
                 },
                 "Startup": {
                     "Enabled": False,
@@ -161,6 +167,10 @@ class OctoslackPlugin(
                     "ReportMovieStatus": False,
                     "PushoverSound": "pushover",
                     "PushoverPriority": 0,
+                    "CommandEnabled": False,
+                    "CaptureCommandReturnCode": False,
+                    "CaptureCommandOutput": False,
+                    "Command": "",
                 },
                 "Shutdown": {
                     "Enabled": False,
@@ -178,6 +188,10 @@ class OctoslackPlugin(
                     "ReportMovieStatus": False,
                     "PushoverSound": "pushover",
                     "PushoverPriority": 0,
+                    "CommandEnabled": False,
+                    "CaptureCommandReturnCode": False,
+                    "CaptureCommandOutput": False,
+                    "Command": "",
                 },
                 "Connecting": {
                     "Enabled": False,
@@ -195,6 +209,10 @@ class OctoslackPlugin(
                     "ReportMovieStatus": False,
                     "PushoverSound": "pushover",
                     "PushoverPriority": 0,
+                    "CommandEnabled": False,
+                    "CaptureCommandReturnCode": False,
+                    "CaptureCommandOutput": False,
+                    "Command": "",
                 },
                 "Connected": {
                     "Enabled": False,
@@ -212,6 +230,10 @@ class OctoslackPlugin(
                     "ReportMovieStatus": False,
                     "PushoverSound": "pushover",
                     "PushoverPriority": 0,
+                    "CommandEnabled": False,
+                    "CaptureCommandReturnCode": False,
+                    "CaptureCommandOutput": False,
+                    "Command": "",
                 },
                 "Disconnecting": {
                     "Enabled": False,
@@ -229,6 +251,10 @@ class OctoslackPlugin(
                     "ReportMovieStatus": False,
                     "PushoverSound": "pushover",
                     "PushoverPriority": 0,
+                    "CommandEnabled": False,
+                    "CaptureCommandReturnCode": False,
+                    "CaptureCommandOutput": False,
+                    "Command": "",
                 },
                 "Disconnected": {
                     "Enabled": False,
@@ -246,6 +272,10 @@ class OctoslackPlugin(
                     "ReportMovieStatus": False,
                     "PushoverSound": "pushover",
                     "PushoverPriority": 0,
+                    "CommandEnabled": False,
+                    "CaptureCommandReturnCode": False,
+                    "CaptureCommandOutput": False,
+                    "Command": "",
                 },
                 "Error": {
                     "Enabled": True,
@@ -263,6 +293,10 @@ class OctoslackPlugin(
                     "ReportMovieStatus": False,
                     "PushoverSound": "pushover",
                     "PushoverPriority": 0,
+                    "CommandEnabled": False,
+                    "CaptureCommandReturnCode": False,
+                    "CaptureCommandOutput": False,
+                    "Command": "",
                 },
                 "PrintStarted": {
                     "Enabled": True,
@@ -280,6 +314,10 @@ class OctoslackPlugin(
                     "ReportMovieStatus": False,
                     "PushoverSound": "pushover",
                     "PushoverPriority": 0,
+                    "CommandEnabled": False,
+                    "CaptureCommandReturnCode": False,
+                    "CaptureCommandOutput": False,
+                    "Command": "",
                 },
                 "PrintFailed": {
                     "Enabled": True,
@@ -297,6 +335,10 @@ class OctoslackPlugin(
                     "ReportMovieStatus": False,
                     "PushoverSound": "pushover",
                     "PushoverPriority": 0,
+                    "CommandEnabled": False,
+                    "CaptureCommandReturnCode": False,
+                    "CaptureCommandOutput": False,
+                    "Command": "",
                 },
                 "PrintCancelling": {
                     "Enabled": True,
@@ -314,6 +356,10 @@ class OctoslackPlugin(
                     "ReportMovieStatus": False,
                     "PushoverSound": "pushover",
                     "PushoverPriority": 0,
+                    "CommandEnabled": False,
+                    "CaptureCommandReturnCode": False,
+                    "CaptureCommandOutput": False,
+                    "Command": "",
                 },
                 "PrintCancelled": {
                     "Enabled": True,
@@ -331,6 +377,10 @@ class OctoslackPlugin(
                     "ReportMovieStatus": False,
                     "PushoverSound": "pushover",
                     "PushoverPriority": 0,
+                    "CommandEnabled": False,
+                    "CaptureCommandReturnCode": False,
+                    "CaptureCommandOutput": False,
+                    "Command": "",
                 },
                 "PrintDone": {
                     "Enabled": True,
@@ -348,6 +398,10 @@ class OctoslackPlugin(
                     "ReportMovieStatus": False,
                     "PushoverSound": "pushover",
                     "PushoverPriority": 0,
+                    "CommandEnabled": False,
+                    "CaptureCommandReturnCode": False,
+                    "CaptureCommandOutput": False,
+                    "Command": "",
                 },
                 ##Not a real event but we'll leverage the same config structure
                 "Progress": {
@@ -371,6 +425,10 @@ class OctoslackPlugin(
                     "IntervalTime": 0,
                     "PushoverSound": "pushover",
                     "PushoverPriority": 0,
+                    "CommandEnabled": False,
+                    "CaptureCommandReturnCode": False,
+                    "CaptureCommandOutput": False,
+                    "Command": "",
                 },
                 ##Not a real event but we'll leverage the same config structure
                 "GcodeEvent": {
@@ -388,6 +446,10 @@ class OctoslackPlugin(
                     "ReportMovieStatus": False,
                     "PushoverSound": "pushover",
                     "PushoverPriority": 0,
+                    "CommandEnabled": False,
+                    "CaptureCommandReturnCode": False,
+                    "CaptureCommandOutput": False,
+                    "Command": "",
                 },
                 ##Not a real event but we'll leverage the same config structure
                 "Heartbeat": {
@@ -406,6 +468,10 @@ class OctoslackPlugin(
                     "IntervalTime": 60,
                     "PushoverSound": "pushover",
                     "PushoverPriority": 0,
+                    "CommandEnabled": False,
+                    "CaptureCommandReturnCode": False,
+                    "CaptureCommandOutput": False,
+                    "Command": "",
                 },
                 "PrintPaused": {
                     "Enabled": True,
@@ -422,6 +488,10 @@ class OctoslackPlugin(
                     "ReportMovieStatus": False,
                     "PushoverSound": "pushover",
                     "PushoverPriority": 0,
+                    "CommandEnabled": False,
+                    "CaptureCommandReturnCode": False,
+                    "CaptureCommandOutput": False,
+                    "Command": "",
                 },
                 "PrintResumed": {
                     "Enabled": True,
@@ -438,6 +508,10 @@ class OctoslackPlugin(
                     "ReportMovieStatus": False,
                     "PushoverSound": "pushover",
                     "PushoverPriority": 0,
+                    "CommandEnabled": False,
+                    "CaptureCommandReturnCode": False,
+                    "CaptureCommandOutput": False,
+                    "Command": "",
                 },
                 "MetadataAnalysisStarted": {
                     "Enabled": False,
@@ -454,6 +528,10 @@ class OctoslackPlugin(
                     "ReportMovieStatus": False,
                     "PushoverSound": "pushover",
                     "PushoverPriority": 0,
+                    "CommandEnabled": False,
+                    "CaptureCommandReturnCode": False,
+                    "CaptureCommandOutput": False,
+                    "Command": "",
                 },
                 "MetadataAnalysisFinished": {
                     "Enabled": False,
@@ -470,6 +548,10 @@ class OctoslackPlugin(
                     "ReportMovieStatus": False,
                     "PushoverSound": "pushover",
                     "PushoverPriority": 0,
+                    "CommandEnabled": False,
+                    "CaptureCommandReturnCode": False,
+                    "CaptureCommandOutput": False,
+                    "Command": "",
                 },
                 "MovieRendering": {
                     "Enabled": False,
@@ -486,6 +568,10 @@ class OctoslackPlugin(
                     "ReportMovieStatus": True,
                     "PushoverSound": "pushover",
                     "PushoverPriority": 0,
+                    "CommandEnabled": False,
+                    "CaptureCommandReturnCode": False,
+                    "CaptureCommandOutput": False,
+                    "Command": "",
                 },
                 "MovieDone": {
                     "Enabled": False,
@@ -504,6 +590,10 @@ class OctoslackPlugin(
                     "UploadMovieLink": False,
                     "PushoverSound": "pushover",
                     "PushoverPriority": 0,
+                    "CommandEnabled": False,
+                    "CaptureCommandReturnCode": False,
+                    "CaptureCommandOutput": False,
+                    "Command": "",
                 },
                 "MovieFailed": {
                     "Enabled": False,
@@ -520,6 +610,10 @@ class OctoslackPlugin(
                     "ReportMovieStatus": True,
                     "PushoverSound": "pushover",
                     "PushoverPriority": 0,
+                    "CommandEnabled": False,
+                    "CaptureCommandReturnCode": False,
+                    "CaptureCommandOutput": False,
+                    "Command": "",
                 },
             },
             "gcode_events": "",
@@ -650,7 +744,9 @@ class OctoslackPlugin(
                 and progress_interval > 0
                 and progress % progress_interval == 0
             ):
-                self.handle_event("Progress", None, {"progress": progress}, False, None)
+                self.handle_event(
+                    "Progress", None, {"progress": progress}, False, False, None
+                )
         except Exception as e:
             self._logger.exception(
                 "Error processing progress event, Error: " + str(e.message)
@@ -660,7 +756,7 @@ class OctoslackPlugin(
 
     def progress_timer_tick(self):
         self._logger.debug("Progress timer tick")
-        self.handle_event("Progress", None, {}, False, None)
+        self.handle_event("Progress", None, {}, False, False, None)
 
     print_cancel_time = None
     progress_timer = None
@@ -671,8 +767,9 @@ class OctoslackPlugin(
             "Progress"
         )
 
-        progress_enabled = progress_event.get("Enabled")
-        if not progress_enabled or progress_enabled == False:
+        progress_notification_enabled = progress_event.get("Enabled")
+        progress_command_enabled = progress_event.get("CommandEnabled")
+        if not progress_notification_enabled and not progress_command_enabled:
             return
 
         progress_timer_interval = int(progress_event.get("IntervalTime"))
@@ -697,8 +794,9 @@ class OctoslackPlugin(
             "Progress"
         )
 
-        progress_enabled = progress_event.get("Enabled")
-        if not progress_enabled or progress_enabled == False:
+        progress_notification_enabled = progress_event.get("Enabled")
+        progress_command_enabled = progress_event.get("CommandEnabled")
+        if not progress_notification_enabled and not progress_command_enabled:
             self.stop_progress_timer()
             return
 
@@ -736,15 +834,16 @@ class OctoslackPlugin(
     def heartbeat_timer_tick(self):
         self._logger.debug("Heartbeat timer tick")
         ##Color may be updated in process_slack_event
-        self.handle_event("Heartbeat", None, {}, False, None)
+        self.handle_event("Heartbeat", None, {}, False, False, None)
 
     def start_heartbeat_timer(self):
         heartbeat_event = self._settings.get(["supported_events"], merged=True).get(
             "Heartbeat"
         )
 
-        heartbeat_enabled = heartbeat_event.get("Enabled")
-        if not heartbeat_enabled or heartbeat_enabled == False:
+        heartbeat_notification_enabled = heartbeat_event.get("Enabled")
+        heartbeat_command_enabled = heartbeat_event.get("CommandEnabled")
+        if not heartbeat_notification_enabled and not heartbeat_command_enabled:
             return
 
         heartbeat_timer_interval = int(heartbeat_event.get("IntervalTime"))
@@ -766,8 +865,9 @@ class OctoslackPlugin(
             "Heartbeat"
         )
 
-        heartbeat_enabled = heartbeat_event.get("Enabled")
-        if not heartbeat_enabled or heartbeat_enabled == False:
+        heartbeat_notification_enabled = heartbeat_event.get("Enabled")
+        heartbeat_command_enabled = heartbeat_event.get("CommandEnabled")
+        if not heartbeat_notification_enabled and not heartbeat_command_enabled:
             self.stop_heartbeat_timer()
             return
 
@@ -837,14 +937,15 @@ class OctoslackPlugin(
         return False
 
     def on_event(self, event, payload):
-        self.handle_event(event, None, payload, False, None)
+        self.handle_event(event, None, payload, False, False, None)
 
     def handle_event(
         self,
         event,
         channel_override,
         payload,
-        override_event_enabled_check,
+        override_notification_enabled_check,
+        override_command_enabled_check,
         event_settings_overrides,
     ):
         try:
@@ -882,7 +983,7 @@ class OctoslackPlugin(
                 self._bot_progress_last_req = None
             elif event == "ZChange":
                 if self.process_zheight_change(payload):
-                    self.handle_event("Progress", None, payload, False, None)
+                    self.handle_event("Progress", None, payload, False, False, None)
                 return
             elif event == "MetadataAnalysisFinished":
                 ##If using OctoPrint-PrintTimeGenius, don't register the finished event until its actually done
@@ -907,8 +1008,14 @@ class OctoslackPlugin(
                 for key in event_settings_overrides:
                     event_settings[key] = event_settings_overrides[key]
 
-            event_enabled = override_event_enabled_check or event_settings["Enabled"]
-            if not event_enabled or event_enabled == False:
+            notification_enabled = (
+                override_notification_enabled_check or event_settings["Enabled"]
+            )
+            command_enabled = (
+                override_command_enabled_check or event_settings["CommandEnabled"]
+            )
+
+            if not notification_enabled and not command_enabled:
                 return
 
             if payload == None:
@@ -917,13 +1024,22 @@ class OctoslackPlugin(
             self._logger.debug(
                 "Event: "
                 + event
-                + ", ChannelOverride: "
-                + str(channel_override)
+                + ", NotificationEnabled: "
+                + str(notification_enabled)
+                + ", CommandEnabled: "
+                + str(command_enabled)
                 + ", Payload: "
                 + str(payload)
             )
 
-            self.process_slack_event(event, event_settings, channel_override, payload)
+            self.process_slack_event(
+                event,
+                event_settings,
+                channel_override,
+                payload,
+                notification_enabled,
+                command_enabled,
+            )
         except Exception as e:
             self._logger.exception(
                 "Error processing event: " + event + ", Error: " + str(e.message)
@@ -940,7 +1056,13 @@ class OctoslackPlugin(
         return print_origin
 
     def process_slack_event(
-        self, event, event_settings, channel_override, event_payload
+        self,
+        event,
+        event_settings,
+        channel_override,
+        event_payload,
+        notification_enabled,
+        command_enabled,
     ):
         fallback = ""
         pretext = ""
@@ -950,6 +1072,7 @@ class OctoslackPlugin(
         color = ""
         fields = []
         footer = ""
+        command = ""
         includeSnapshot = False
         reportPrinterState = False
         reportEnvironment = False
@@ -973,6 +1096,8 @@ class OctoslackPlugin(
             pretext = event_settings["Message"]
         if "Color" in event_settings:
             color = event_settings["Color"]
+        if "Command" in event_settings:
+            command = event_settings["Command"]
         if "CaptureSnapshot" in event_settings:
             includeSnapshot = event_settings["CaptureSnapshot"]
         if "ReportPrinterState" in event_settings:
@@ -1255,22 +1380,26 @@ class OctoslackPlugin(
 
             footer = "Printer: " + printer_text + temp_str + z_height_str
 
-        if self._settings.get(["include_raspi_temp"], merged=True):
+        ##Skip this if not sending a notification (not current available for command execution)
+        if notification_enabled and self._settings.get(
+            ["include_raspi_temp"], merged=True
+        ):
 
             rpi_tmp = None
             try:
-                rpi_tmp = subprocess.check_output(
-                    ["/opt/vc/bin/vcgencmd", "measure_temp"]
-                )
+                p = run("/opt/vc/bin/vcgencmd measure_temp", stdout=Capture())
+                rpi_tmp = p.stdout.text
+
                 if not rpi_tmp == None and rpi_tmp.startswith("temp="):
                     rpi_tmp = rpi_tmp.strip()
                     rpi_tmp = rpi_tmp[5:-2]
                 else:
                     rpi_tmp = None
             except Exception as e:
-                if type(e) == exceptions.OSError and e.errno == 2:
+                if type(e) == ValueError:
                     self._logger.error(
-                        "Unable to execute Raspberry Pi command (/opt/vc/bin/vcgencmd)"
+                        "Unable to execute Raspberry Pi command (/opt/vc/bin/vcgencmd): "
+                        + e.message
                     )
                 else:
                     self._logger.exception(
@@ -1385,6 +1514,8 @@ class OctoslackPlugin(
                 text = text.replace(param, replacement_params[param])
             if not footer == None:
                 footer = footer.replace(param, replacement_params[param])
+            if not command == None:
+                command = command.replace(param, shell_quote(replacement_params[param]))
 
             for field in fields:
                 if "title" in field:
@@ -1396,28 +1527,61 @@ class OctoslackPlugin(
                         param, replacement_params[param]
                     )
 
-        t = threading.Thread(
-            target=self.send_slack_message,
-            args=(
-                event,
-                event_settings,
-                event_payload,
-                channel_override,
-                fallback,
-                pretext,
-                title,
-                text,
-                color,
-                fields,
-                footer,
-                includeSnapshot,
-                replacement_params["{pct_complete}"],
-            ),
-        )
-        t.start()
+        ##Execute custom command
+        capture_command_returncode = False
+        capture_command_output = False
 
-        # Currrently only querying IPv4 although the library supports IPv6 as well
+        if (
+            notification_enabled
+            and "CaptureCommandReturnCode" in event_settings
+            and event_settings["CaptureCommandReturnCode"]
+        ):
+            capture_command_returncode = True
 
+        if (
+            notification_enabled
+            and "CaptureCommandOutput" in event_settings
+            and event_settings["CaptureCommandOutput"]
+        ):
+            capture_command_output = True
+
+        command_thread = None
+        command_thread_rsp = None
+        if command_enabled:
+            command_thread_rsp = Queue.Queue()
+            command_thread = threading.Thread(
+                target=self.execute_command,
+                args=(event, command, capture_command_output, command_thread_rsp),
+            )
+            command_thread.start()
+
+        ##Execute notification send
+        if notification_enabled:
+            notification_thread = threading.Thread(
+                target=self.send_slack_message,
+                args=(
+                    event,
+                    event_settings,
+                    event_payload,
+                    channel_override,
+                    fallback,
+                    pretext,
+                    title,
+                    text,
+                    color,
+                    fields,
+                    footer,
+                    includeSnapshot,
+                    replacement_params["{pct_complete}"],
+                    command_thread,
+                    command_thread_rsp,
+                    capture_command_returncode,
+                    capture_command_output,
+                ),
+            )
+            notification_thread.start()
+
+    # Currrently only querying IPv4 although the library supports IPv6 as well
     def get_ips(self):
         ips = []
         try:
@@ -1688,7 +1852,7 @@ class OctoslackPlugin(
 
         if command == "help":
             self._logger.debug("Slack RTM - help command")
-            self.handle_event("Help", channel, {}, True, None)
+            self.handle_event("Help", channel, {}, True, False, None)
             reaction = positive_reaction
 
         elif command == "stop":
@@ -1738,7 +1902,7 @@ class OctoslackPlugin(
             self.add_message_reaction(
                 slackAPIToken, channel, timestamp, processing_reaction, False
             )
-            self.handle_event("Progress", channel, {}, True, None)
+            self.handle_event("Progress", channel, {}, True, False, None)
             reaction = positive_reaction
 
         else:
@@ -1970,6 +2134,59 @@ class OctoslackPlugin(
     _bot_progress_last_snapshot = None
     _slack_next_progress_snapshot_time = 0
 
+    def execute_command(self, event, command, capture_output, command_rsp):
+        self._logger.debug(
+            "Executing command for event: " + event + ' - "' + command + '"'
+        )
+
+        return_code = None
+        command_output = None
+        error_msg = None
+
+        try:
+            execution_start = time.time()
+
+            if capture_output:
+                pipeline = run(command, stdout=Capture())
+            else:
+                pipeline = run(command)
+
+            execution_elapsed = time.time() - execution_start
+
+            pipeline_cmd = pipeline.commands[0]
+
+            if capture_output:
+                command_output = pipeline_cmd.stdout.text
+
+            return_code = pipeline_cmd.returncode
+
+            self._logger.debug(
+                "Command executed in "
+                + str(round(execution_elapsed, 2))
+                + " seconds"
+                + " - ReturnCode: "
+                + str(return_code)
+                + ", Command: "
+                + command
+                + ", Output: "
+                + str(command_output)
+            )
+        except Exception as e:
+            error_msg = e.message
+
+            if type(e) == ValueError:
+                self._logger.error(
+                    "Failed to execute command for event: " + event + " - " + e.message
+                )
+            else:
+                self._logger.exception(
+                    "Failed to execute command for event: " + event + " - " + str(e)
+                )
+
+        command_rsp.put(return_code)
+        command_rsp.put(command_output)
+        command_rsp.put(error_msg)
+
     def send_slack_message(
         self,
         event,
@@ -1985,6 +2202,10 @@ class OctoslackPlugin(
         footer,
         includeSnapshot,
         print_pct_complete,
+        command_thread,
+        command_thread_rsp,
+        capture_command_returncode,
+        capture_command_output,
     ):
         try:
             slackAPIToken = None
@@ -2228,6 +2449,87 @@ class OctoslackPlugin(
                             text += newline + " - "
 
                         text += error_msg
+
+            if (
+                capture_command_returncode or capture_command_output
+            ) and command_thread:
+                try:
+                    cmd_return_code = None
+                    cmd_output = None
+                    cmd_error_msg = None
+
+                    command_thread.join(COMMAND_EXECUTION_WAIT)  ##seconds
+
+                    if command_thread.isAlive():
+                        cmd_error_msg = (
+                            "Command did not return within "
+                            + str(COMMAND_EXECUTION_WAIT)
+                            + " seconds"
+                        )
+                    else:
+                        cmd_return_code = command_thread_rsp.get()
+                        cmd_output = command_thread_rsp.get()
+                        cmd_error_msg = command_thread_rsp.get()
+
+                    if capture_command_returncode and cmd_return_code:
+                        if text == None:
+                            text = ""
+                        elif len(text) > 0:
+                            text += newline
+
+                        text += (
+                            bold_text_start
+                            + "Command return code"
+                            + bold_text_end
+                            + name_val_sep
+                            + str(cmd_return_code)
+                        )
+
+                    if capture_command_output and cmd_output:
+                        if text == None:
+                            text = ""
+                        elif len(text) > 0:
+                            text += newline
+
+                        text += (
+                            bold_text_start
+                            + "Command output"
+                            + bold_text_end
+                            + name_val_sep
+                            + str(cmd_output)
+                        )
+
+                    if cmd_error_msg and len(cmd_error_msg.strip()) > 0:
+                        if text == None:
+                            text = ""
+                        elif len(text) > 0:
+                            text += newline
+
+                        text += (
+                            bold_text_start
+                            + "Command execution error"
+                            + bold_text_end
+                            + name_val_sep
+                            + str(cmd_error_msg.strip())
+                        )
+                except Exception as e:
+                    self._logger.exception(
+                        "An error occurred while waiting for the command thread to return or while retrieving the command output: "
+                        + str(e)
+                    )
+
+                    if text == None:
+                        text = ""
+                    elif len(text) > 0:
+                        text += newline
+
+                    text += (
+                        bold_text_start
+                        + "Command execution error"
+                        + bold_text_end
+                        + name_val_sep
+                        + str(e.message)
+                    )
 
             if (
                 connection_method == "WEBHOOK"
@@ -3903,9 +4205,9 @@ class OctoslackPlugin(
 
             for gcode_event in tmp_gcode_events:
                 if (
-                    not gcode_event["Enabled"] == True
-                    or len(gcode_event["Gcode"].strip()) == 0
-                ):
+                    gcode_event["Enabled"] == False
+                    and gcode_event["CommandEnabled"] == False
+                ) or len(gcode_event["Gcode"].strip()) == 0:
                     continue
 
                 if (
@@ -3969,11 +4271,25 @@ class OctoslackPlugin(
                 if self.evaluate_gcode_trigger(
                     cmd, gcode_event, match_type, trigger_gcode
                 ):
+                    notification_enabled = gcode_event["Enabled"]
+                    command_enabled = gcode_event["CommandEnabled"]
+
                     self._logger.debug(
-                        "Caught sent G-code: " + self.remove_non_ascii(cmd)
+                        "Caught sent G-code: "
+                        + self.remove_non_ascii(cmd)
+                        + ", NotificationEnabled: "
+                        + str(notification_enabled)
+                        + ", CommandEnabled: "
+                        + str(command_enabled)
                     )
+
                     self.handle_event(
-                        "GcodeEvent", None, {"cmd": cmd}, True, gcode_event
+                        "GcodeEvent",
+                        None,
+                        {"cmd": cmd},
+                        notification_enabled,
+                        command_enabled,
+                        gcode_event,
                     )
         except Exception as e:
             self._logger.exception(
@@ -4004,11 +4320,24 @@ class OctoslackPlugin(
                 if self.evaluate_gcode_trigger(
                     line, gcode_event, match_type, trigger_gcode
                 ):
+                    notification_enabled = gcode_event["Enabled"]
+                    command_enabled = gcode_event["CommandEnabled"]
+
                     self._logger.debug(
-                        "Caught received G-code: " + self.remove_non_ascii(line)
+                        "Caught received G-code: "
+                        + self.remove_non_ascii(line)
+                        + ", NotificationEnabled: "
+                        + str(notification_enabled)
+                        + ", CommandEnabled: "
+                        + str(command_enabled)
                     )
                     self.handle_event(
-                        "GcodeEvent", None, {"cmd": line}, True, gcode_event
+                        "GcodeEvent",
+                        None,
+                        {"cmd": line},
+                        notification_enabled,
+                        command_enabled,
+                        gcode_event,
                     )
         except Exception as e:
             self._logger.exception(

@@ -247,7 +247,6 @@ var Octoslack = {
         rocketChatUploadOption.attr("class", "octoslack_hidden"); 
         matrixUploadOption.attr("class", "octoslack_hidden"); 
 
-
         switch (new_type) {
             case "APITOKEN":
                 slack_config_section.attr("class", "octoslack_visible");
@@ -356,10 +355,11 @@ var Octoslack = {
     },
 
     escapeHtml : function(html_text) {
-        var text_elem = document.createTextNode(html_text);
-        var div_elem = document.createElement('div');
-        div_elem.appendChild(text_elem);
-        return div_elem.innerHTML;
+	return html_text.replace(/&/g, "&amp;")
+	    .replace(/</g, "&lt;")
+	    .replace(/>/g, "&gt;")
+	    .replace(/"/g, "&quot;")
+	    .replace(/'/g, "&#039;");
     },
 
     changeImgurClientID : function() {
@@ -492,12 +492,11 @@ var Octoslack = {
 	var gcodeVal = gcodeElem.val().trim();
 	var typeVal = gcodeTypeElem.val().trim();
 
-        var newTitle = this.buildGcodeEventTitle(gcodeVal, typeVal);
-
+        var newTitle = this.buildGcodeEventTitle(gcodeVal, typeVal, false);
         titleElem.text(newTitle);
     },
 
-    buildGcodeEventTitle : function(gcode, type) {
+    buildGcodeEventTitle : function(gcode, type, escape_text) {
         if(type == "sent")
             type = "Sent";
         else
@@ -507,13 +506,12 @@ var Octoslack = {
         if (gcode.length == 0)
             newTitle = "...";
         else
-            newTitle = "[" + type + "] " + this.escapeHtml(gcode);
+            newTitle = "[" + type + "] " + (escape_text ? this.escapeHtml(gcode) : gcode);
 
         return newTitle;
     },
 
     buildOctoPrintEventConfigRow : function(eventType, events, action_text, action_handler) {
-
         var useDataBind = false;
 
 	var eventHtml = [];
@@ -565,16 +563,20 @@ var Octoslack = {
             var customFallback = "";
             var customPushoverSound = ""
 	    var customPushoverPriority = ""
+            var customCommandEnabled = false;
+            var customCaptureCommandReturnCode = false;
+            var customCaptureCommandOutput = false;
+            var customCommand = "";
+
+            var rowContainerId = eventType + "_" + internalName + "_row";
+	
+	    eventHtml.push("        <div id='" + rowContainerId + "' internalname='" + internalName + "'>"); //Start event
 
             if(eventType == "STANDARD") {
                 useDataBind = true;
 	        var displayName = event.DisplayName;
-	        eventHtml.push("        <h3>" + this.escapeHtml(displayName) + "</h3>");
+	        eventHtml.push("        <div class='octoslack_h3'>&#8212; " + this.escapeHtml(displayName) + " &#8212;</div>");
             }
-
-            var rowContainerId = eventType + "_" + internalName + "_row";
-
-	    eventHtml.push("        <div id='" + rowContainerId + "' internalname='" + internalName + "'>");
 
             if(eventType == "GCODE") {
 	        var gcode = event.Gcode;
@@ -597,26 +599,41 @@ var Octoslack = {
                     customPushoverSound = customPushoverSound.trim();
 
 		customPushoverPriority = event.PushoverPriority;
-		if(customPushoverPriority=== undefined)
+		if(customPushoverPriority === undefined)
                     customPushoverPriority = '';
 		else
                     customPushoverPoriority = customPushoverPriority.trim();
 
+                if(event.CommandEnabled !== undefined)
+                    customCommandEnabled = event.CommandEnabled;
+
+                if(event.CaptureCommandReturnCode !== undefined)
+                    customCaptureCommandReturnCode = event.CaptureCommandReturnCode;
+
+                if(event.CaptureCommandOutput !== undefined)
+                    customCaptureCommandOutput = event.CaptureCommandOutput;
+
+                if(event.Command !== undefined)
+                    customCommand = event.Command;
+
                 if(gcode == undefined)
                     gcode = "";
-	        eventHtml.push("        <h3><span id='octoslack_event_" + internalName + "_gcode_title'>" + this.buildGcodeEventTitle(gcode, gcodeType) + "</span></h3>");
+
+	        eventHtml.push("        <div class='octoslack_h3'><span id='octoslack_event_" + internalName + "_gcode_title'>&#8212; " + this.buildGcodeEventTitle(gcode, gcodeType, true) + " &#8212;</span></div>");
             }
 
-            //Enabled
-	    eventHtml.push("        <div class='octoprint_config_row'>");
-	    eventHtml.push("            <input type='checkbox' class='octoslack_valign octoslack_checkbox_margin_override' id='octoslack_event_" + internalName + "_enabled' "
-                + (useDataBind ? "data-bind='checked: settings.plugins.Octoslack.supported_events." + internalName + ".Enabled'" : "")
-                + (customEnabled ? " checked " : " ")
-                + ">");
-	    eventHtml.push("            <div class='octoslack_label octoslack_action_label' onclick=\"$('#octoslack_event_" + internalName + "_enabled').trigger('click')\">Enabled</div>");
-	    eventHtml.push("        </div>");
+	    eventHtml.push("    <br/>");
+	    
+	    var customSettingsHtml = [];
+	    var needCustomSettings = false;
 
+	    customSettingsHtml.push("        <div class='octoprint_config_row'>");
+	    customSettingsHtml.push("            <span class='octoslack_config_group_title'>Event settings</span>");
+	    customSettingsHtml.push("        </div>");
+
+	    customSettingsHtml.push("    <div class='octoslack_small_config_group'>"); //Start event settings section
             if(eventType == "GCODE") {
+		needCustomSettings = true;
 	        var gcode = event.Gcode;
                 if(gcode == undefined)
                     gcode = "";
@@ -624,47 +641,164 @@ var Octoslack = {
 		var gcodeTitleHandler = "Octoslack.updateGcodeEventTitle(\"" + internalName + "\");";
 
                 //GcodeType
-	        eventHtml.push("        <div class='octoprint_config_row'>");
-	        eventHtml.push("            <select class='octoslack_select' id='octoslack_event_" + internalName + "_gcode_type' onchange='" + gcodeTitleHandler + "'>");
-	        eventHtml.push("                <option value='sent'" + (!gcodeType || gcodeType == 'sent' ? ' selected' : '') + ">G-code sent</option>");
-	        eventHtml.push("                <option value='received'" + (gcodeType == 'received' ? ' selected' : '') + ">G-code received</option>");
-	        eventHtml.push("            </select>");
-	        eventHtml.push("            <div class='octoslack_label'>G-code type</div>");
-	        eventHtml.push("            <br/>");
-	        eventHtml.push("            <small class='muted'>");
-	        eventHtml.push("                G-code sent = Commands sent from OctoPrint to the printer");
-	        eventHtml.push("                <br/>");
-	        eventHtml.push("                G-code received = Commands/data received from the printer");
-	        eventHtml.push("            </small>");
-	        eventHtml.push("        </div>");
+	        customSettingsHtml.push("        <div class='octoprint_config_row'>");
+	        customSettingsHtml.push("            <select class='octoslack_select' id='octoslack_event_" + internalName + "_gcode_type' onchange='" + gcodeTitleHandler + "'>");
+	        customSettingsHtml.push("                <option value='sent'" + (!gcodeType || gcodeType == 'sent' ? ' selected' : '') + ">G-code sent</option>");
+	        customSettingsHtml.push("                <option value='received'" + (gcodeType == 'received' ? ' selected' : '') + ">G-code received</option>");
+	        customSettingsHtml.push("            </select>");
+	        customSettingsHtml.push("            <div class='octoslack_label'>G-code type</div>");
+	        customSettingsHtml.push("            <br/>");
+	        customSettingsHtml.push("            <small class='muted'>");
+	        customSettingsHtml.push("                G-code sent = Commands sent from OctoPrint to the printer");
+	        customSettingsHtml.push("                <br/>");
+	        customSettingsHtml.push("                G-code received = Commands/data received from the printer");
+	        customSettingsHtml.push("            </small>");
+	        customSettingsHtml.push("        </div>");
 
                 //GcodeMatchType
-	        eventHtml.push("        <div class='octoprint_config_row'>");
-	        eventHtml.push("            <select class='octoslack_select' id='octoslack_event_" + internalName + "_gcode_match_type'>");
-	        eventHtml.push("                <option value='StartsWith'" + (!gcodeMatchType || gcodeMatchType == 'StartsWith' ? ' selected' : '') + ">Starts with</option>");
-	        eventHtml.push("                <option value='EndsWith'" + (gcodeMatchType == 'EndsWith' ? ' selected' : '') + ">Ends with</option>");
-	        eventHtml.push("                <option value='Contains'" + (gcodeMatchType == 'Contains' ? ' selected' : '') + ">Contains</option>");
-	        eventHtml.push("                <option value='Regex'" + (gcodeMatchType == 'Regex' ? ' selected' : '') + ">Regular expression</option>");
-	        eventHtml.push("            </select>");
-	        eventHtml.push("            <div class='octoslack_label'>G-code match type</div>");
-                eventHtml.push("            <br/>");
-                eventHtml.push("            <small class='muted'>");
-                eventHtml.push('                NOTE: Inefficient regular expressions can incur long execution times which may block OctoPrint\'s communication with your printer.');
-                eventHtml.push("            </small>");
-	        eventHtml.push("        </div>");
+	        customSettingsHtml.push("        <div class='octoprint_config_row'>");
+	        customSettingsHtml.push("            <select class='octoslack_select' id='octoslack_event_" + internalName + "_gcode_match_type'>");
+	        customSettingsHtml.push("                <option value='StartsWith'" + (!gcodeMatchType || gcodeMatchType == 'StartsWith' ? ' selected' : '') + ">Starts with</option>");
+	        customSettingsHtml.push("                <option value='EndsWith'" + (gcodeMatchType == 'EndsWith' ? ' selected' : '') + ">Ends with</option>");
+	        customSettingsHtml.push("                <option value='Contains'" + (gcodeMatchType == 'Contains' ? ' selected' : '') + ">Contains</option>");
+	        customSettingsHtml.push("                <option value='Regex'" + (gcodeMatchType == 'Regex' ? ' selected' : '') + ">Regular expression</option>");
+	        customSettingsHtml.push("            </select>");
+	        customSettingsHtml.push("            <div class='octoslack_label'>G-code match type</div>");
+                customSettingsHtml.push("            <br/>");
+                customSettingsHtml.push("            <small class='muted'>");
+                customSettingsHtml.push('                NOTE: Inefficient regular expressions can incur long execution times which may block OctoPrint\'s communication with your printer.');
+                customSettingsHtml.push("            </small>");
+	        customSettingsHtml.push("        </div>");
 
                 //Gcode
-	        eventHtml.push("        <div class='octoprint_config_row'>");
-	        eventHtml.push("            <input type='text' size='30' id='octoslack_event_" + internalName + "_gcode' onkeydown='" + gcodeTitleHandler + "' onpaste='" + gcodeTitleHandler + "' oninput='" + gcodeTitleHandler + "' onchange='" + gcodeTitleHandler + "' "
+	        customSettingsHtml.push("        <div class='octoprint_config_row'>");
+	        customSettingsHtml.push("            <input type='text' size='30' id='octoslack_event_" + internalName + "_gcode' onkeydown='" + gcodeTitleHandler + "' onpaste='" + gcodeTitleHandler + "' oninput='" + gcodeTitleHandler + "' onchange='" + gcodeTitleHandler + "' "
                     + (useDataBind ? "data-bind='value: settings.plugins.Octoslack.supported_events." + internalName + ".Gcode'" : "") 
                     + " value='" + this.escapeHtml(gcode.trim()) + "'>");
-	        eventHtml.push("            <div class='octoslack_label octoslack_action_label'>G-code</div>");
-                eventHtml.push("            <br/>");
-                eventHtml.push("            <small class='muted'>");
-                eventHtml.push('                The G-code/text pattern or regular expression to match against sent/received G-code.');
-                eventHtml.push("            </small>");
-	        eventHtml.push("        </div>");
+	        customSettingsHtml.push("            <div class='octoslack_label octoslack_action_label'>G-code</div>");
+                customSettingsHtml.push("            <br/>");
+                customSettingsHtml.push("            <small class='muted'>");
+                customSettingsHtml.push('                The G-code/text pattern or regular expression to match against sent/received G-code.');
+                customSettingsHtml.push("            </small>");
+	        customSettingsHtml.push("        </div>");
+            }
 
+            if(eventType == "STANDARD" && internalName == "Progress") {
+		needCustomSettings = true;
+
+                // Update method (inplace, or new messagse)
+                customSettingsHtml.push("        <div id='octoslack_progress_update_method' class='octoprint_config_row'>");
+                customSettingsHtml.push("            <select class='octoslack_select' id='octoslack_event_" + internalName + "_UpdateMethod' "
+                    + (useDataBind ? "data-bind='value: settings.plugins.Octoslack.supported_events." + internalName + ".UpdateMethod'" : "")
+                    + " onchange='Octoslack.applySlackUploadChanges()'>");
+                customSettingsHtml.push("<option value='INPLACE'>In-place</option>");
+                customSettingsHtml.push("<option value='NEW_MESSAGE'>New Message</option>");
+                customSettingsHtml.push("</select>");
+                customSettingsHtml.push("            <div class='octoslack_label octoslack_action_label'>Progress Update Method</div>");
+                customSettingsHtml.push("            <br/>");
+                customSettingsHtml.push("            <small class='muted'>");
+                customSettingsHtml.push('                If "In-place" is selected, rather than sending a new message to update the progress, the existing message will be updated in place. Requires Slack API Token.');
+                customSettingsHtml.push("            </small>");
+                customSettingsHtml.push("        <br/>");
+                customSettingsHtml.push("        </div>");
+
+                // Min image update interval
+                customSettingsHtml.push("        <div id='octoslack_progress_image_update_interval' class='octoprint_config_row'>");
+                customSettingsHtml.push("            <input type='number' step='any' min='0' max='1440' class='input-mini text-right' id='octoslack_event_" + internalName + "_SlackMinSnapshotUpdateInterval' "
+                 + (useDataBind ? "data-bind='value: settings.plugins.Octoslack.supported_events." + internalName + ".SlackMinSnapshotUpdateInterval'" : "")
+                 + ">");
+                customSettingsHtml.push("            <div class='octoslack_label octoslack_action_label'>Snapshot Upload Minimum Interval</div>");
+                customSettingsHtml.push("            <br/>");
+                customSettingsHtml.push("            <br/>");
+                customSettingsHtml.push("            <small class='muted'>");
+                customSettingsHtml.push("                For Slack snapshot uploads, the minumum amount of time (in minutes) that must pass before the next progress snapshot is uploaded. Requires Slack API Token. 0 = disabled (always send snapshots)");
+                customSettingsHtml.push("            </small>");
+                customSettingsHtml.push("        <br/>");
+                customSettingsHtml.push("        </div>");
+
+                //IntervalPct
+	        customSettingsHtml.push("        <div class='octoprint_config_row'>");
+	        customSettingsHtml.push("            <input type='number' step='any' min='0' max='99' class='input-mini text-right' id='octoslack_event_" + internalName + "_InvervalPct' "
+                    + (useDataBind ? "data-bind='value: settings.plugins.Octoslack.supported_events." + internalName + ".IntervalPct'" : "")
+                    + ">");
+	        customSettingsHtml.push("            <div class='octoslack_label octoslack_action_label'>Interval - Percentage</div>");
+	        customSettingsHtml.push("            <br/>");
+	        customSettingsHtml.push("            <small class='muted'>");
+	        customSettingsHtml.push("                0 = disabled");
+	        customSettingsHtml.push("                <br/>");
+	        customSettingsHtml.push("                A value of 5 would indicate report progress should be sent at 5%, 10%, 15%, etc.");
+	        customSettingsHtml.push("            </small>");
+	        customSettingsHtml.push("        </div>");
+	        customSettingsHtml.push("        <br/>");
+
+                //IntervalHeight
+	        customSettingsHtml.push("        <div class='octoprint_config_row'>");
+	        customSettingsHtml.push("            <input type='number' step='0.1' min='0' max='10000' class='input-mini text-right' id='octoslack_event_" + internalName + "_InvervalHeight' "
+                    + (useDataBind ? "data-bind='value: settings.plugins.Octoslack.supported_events." + internalName + ".IntervalHeight'" : "")
+                    + ">");
+	        customSettingsHtml.push("            <div class='octoslack_label octoslack_action_label'>Interval - Height (mm)</div>");
+	        customSettingsHtml.push("            <br/>");
+	        customSettingsHtml.push("            <small class='muted'>");
+	        customSettingsHtml.push("                0 = disabled");
+	        customSettingsHtml.push("                <br/>");
+	        customSettingsHtml.push("                A value of 50 would indicate report progress should be sent each time the nozzle height has raised an additional 50mm");
+	        customSettingsHtml.push("            </small>");
+	        customSettingsHtml.push("        </div>");
+	        customSettingsHtml.push("        <br/>");
+
+                //IntervalTime
+	        customSettingsHtml.push("        <div class='octoprint_config_row'>");
+	        customSettingsHtml.push("            <input type='number' step='any' min='0' class='input-mini text-right' id='octoslack_event_" + internalName + "_IntervalTime' "
+                    + (useDataBind ? "data-bind='value: settings.plugins.Octoslack.supported_events." + internalName + ".IntervalTime'" : "")
+                    + ">");
+	        customSettingsHtml.push("            <div class='octoslack_label octoslack_action_label'>Interval - Time (minutes)</div>");
+	        customSettingsHtml.push("            <br/>")
+	        customSettingsHtml.push("            <small class='muted'>");
+	        customSettingsHtml.push("                0 = disabled");
+	        customSettingsHtml.push("                <br/>");
+	        customSettingsHtml.push("                A value of 5 would indicate report progress should be sent every 5 minutes ");
+	        customSettingsHtml.push("            </small>");
+	        customSettingsHtml.push("        </div>");
+            }
+
+            if(eventType == "STANDARD" && internalName == "Heartbeat") {
+		needCustomSettings = true;
+
+                //IntervalTime
+	        customSettingsHtml.push("        <div class='octoprint_config_row'>");
+	        customSettingsHtml.push("            <input type='number' step='any' min='1' class='input-mini text-right' id='octoslack_event_" + internalName + "_IntervalTime' "
+                    + (useDataBind ? "data-bind='value: settings.plugins.Octoslack.supported_events." + internalName + ".IntervalTime'" : "")
+                    + ">");
+	        customSettingsHtml.push("            <div class='octoslack_label octoslack_action_label'>Interval - Time (minutes)</div>");
+	        customSettingsHtml.push("            <br/>")
+	        customSettingsHtml.push("            <small class='muted'>");
+	        customSettingsHtml.push("                0 = disabled");
+	        customSettingsHtml.push("                <br/>");
+	        customSettingsHtml.push("                A value of 5 would indicate a heartbeat message should be sent every 5 minutes ");
+	        customSettingsHtml.push("            </small>");
+	        customSettingsHtml.push("        </div>");
+            }
+
+	    customSettingsHtml.push("    </div>"); //End event settings section
+	    customSettingsHtml.push("    <br/>");
+
+            if(needCustomSettings) {
+                for(var k = 0; k < customSettingsHtml.length; k++)
+                    eventHtml.push(customSettingsHtml[k]);
+            }
+
+            //Notification enabled
+	    eventHtml.push("        <div class='octoprint_config_row'>");
+	    eventHtml.push("            <input type='checkbox' class='octoslack_checkbox_margin_override octoslack_large_checkbox' id='octoslack_event_" + internalName + "_enabled' "
+                + (useDataBind ? "data-bind='checked: settings.plugins.Octoslack.supported_events." + internalName + ".Enabled'" : "")
+                + (customEnabled ? " checked " : " ")
+                + ">");
+	    eventHtml.push("            <span class='octoslack_action_label octoslack_config_group_title' onclick=\"$('#octoslack_event_" + internalName + "_enabled').trigger('click')\">Enable notification</span>");
+	    eventHtml.push("        </div>");
+
+	    eventHtml.push("    <div class='octoslack_small_config_group'>"); //Start notification section
+
+            if(eventType == "GCODE") {
                 //Color
 	        eventHtml.push("        <div class='octoprint_config_row' octoslack_msg_slack>");
 	        eventHtml.push("            <select class='octoslack_select' id='octoslack_event_" + internalName + "_color'>");
@@ -674,100 +808,6 @@ var Octoslack = {
 	        eventHtml.push("            </select>");
 	        eventHtml.push("            <div class='octoslack_label'>Status level</div>");
 	        eventHtml.push("        </div>");
-            }
-
-            if(eventType == "STANDARD" && internalName == "Progress") {
-                // Update method (inplace, or new messagse)
-            eventHtml.push("        <div id='octoslack_progress_update_method' class='octoprint_config_row'>");
-            eventHtml.push("            <select class='octoslack_select' id='octoslack_event_" + internalName + "_UpdateMethod' "
-                 + (useDataBind ? "data-bind='value: settings.plugins.Octoslack.supported_events." + internalName + ".UpdateMethod'" : "")
-                 + " onchange='Octoslack.applySlackUploadChanges()'>");
-            eventHtml.push("<option value='INPLACE'>In-place</option>");
-            eventHtml.push("<option value='NEW_MESSAGE'>New Message</option>");
-            eventHtml.push("</select>");
-            eventHtml.push("            <div class='octoslack_label octoslack_action_label'>Progress Update Method</div>");
-            eventHtml.push("            <br/>");
-            eventHtml.push("            <small class='muted'>");
-            eventHtml.push('                If "In-place" is selected, rather than sending a new message to update the progress, the existing message will be updated in place. Requires Slack API Token.');
-            eventHtml.push("            </small>");
-            eventHtml.push("        <br/>");
-            eventHtml.push("        </div>");
-             // Min image update interval
-            eventHtml.push("        <div id='octoslack_progress_image_update_interval' class='octoprint_config_row'>");
-            eventHtml.push("            <input type='number' step='any' min='0' max='1440' class='input-mini text-right' id='octoslack_event_" + internalName + "_SlackMinSnapshotUpdateInterval' "
-                 + (useDataBind ? "data-bind='value: settings.plugins.Octoslack.supported_events." + internalName + ".SlackMinSnapshotUpdateInterval'" : "")
-                 + ">");
-            eventHtml.push("            <div class='octoslack_label octoslack_action_label'>Snapshot Upload Minimum Interval</div>");
-            eventHtml.push("            <br/>");
-            eventHtml.push("            <br/>");
-            eventHtml.push("            <small class='muted'>");
-            eventHtml.push("                For Slack snapshot uploads, the minumum amount of time (in minutes) that must pass before the next progress snapshot is uploaded. Requires Slack API Token. 0 = disabled (always send snapshots)");
-            eventHtml.push("            </small>");
-            eventHtml.push("        <br/>");
-            eventHtml.push("        </div>");
-            eventHtml.push("        <div class='octoprint_config_row'>");
-                //IntervalPct
-	        eventHtml.push("        <div class='octoprint_config_row'>");
-	        eventHtml.push("            <input type='number' step='any' min='0' max='99' class='input-mini text-right' id='octoslack_event_" + internalName + "_InvervalPct' "
-                    + (useDataBind ? "data-bind='value: settings.plugins.Octoslack.supported_events." + internalName + ".IntervalPct'" : "")
-                    + ">");
-	        eventHtml.push("            <div class='octoslack_label octoslack_action_label'>Interval - Percentage</div>");
-	        eventHtml.push("            <br/>");
-	        eventHtml.push("            <small class='muted'>");
-	        eventHtml.push("                0 = disabled");
-	        eventHtml.push("                <br/>");
-	        eventHtml.push("                A value of 5 would indicate report progress should be sent at 5%, 10%, 15%, etc.");
-	        eventHtml.push("            </small>");
-	        eventHtml.push("        </div>");
-	        eventHtml.push("        <br/>");
-
-                //IntervalHeight
-	        eventHtml.push("        <div class='octoprint_config_row'>");
-	        eventHtml.push("            <input type='number' step='0.1' min='0' max='10000' class='input-mini text-right' id='octoslack_event_" + internalName + "_InvervalHeight' "
-                    + (useDataBind ? "data-bind='value: settings.plugins.Octoslack.supported_events." + internalName + ".IntervalHeight'" : "")
-                    + ">");
-	        eventHtml.push("            <div class='octoslack_label octoslack_action_label'>Interval - Height (mm)</div>");
-	        eventHtml.push("            <br/>");
-	        eventHtml.push("            <small class='muted'>");
-	        eventHtml.push("                0 = disabled");
-	        eventHtml.push("                <br/>");
-	        eventHtml.push("                A value of 50 would indicate report progress should be sent each time the nozzle height has raised an additional 50mm");
-	        eventHtml.push("            </small>");
-	        eventHtml.push("        </div>");
-	        eventHtml.push("        <br/>");
-
-
-                //IntervalTime
-	        eventHtml.push("        <div class='octoprint_config_row'>");
-	        eventHtml.push("            <input type='number' step='any' min='0' class='input-mini text-right' id='octoslack_event_" + internalName + "_IntervalTime' "
-                    + (useDataBind ? "data-bind='value: settings.plugins.Octoslack.supported_events." + internalName + ".IntervalTime'" : "")
-                    + ">");
-	        eventHtml.push("            <div class='octoslack_label octoslack_action_label'>Interval - Time (minutes)</div>");
-	        eventHtml.push("            <br/>")
-	        eventHtml.push("            <small class='muted'>");
-	        eventHtml.push("                0 = disabled");
-	        eventHtml.push("                <br/>");
-	        eventHtml.push("                A value of 5 would indicate report progress should be sent every 5 minutes ");
-	        eventHtml.push("            </small>");
-	        eventHtml.push("        </div>");
-	        eventHtml.push("        <br/>");
-            }
-
-            if(eventType == "STANDARD" && internalName == "Heartbeat") {
-                //IntervalTime
-	        eventHtml.push("        <div class='octoprint_config_row'>");
-	        eventHtml.push("            <input type='number' step='any' min='1' class='input-mini text-right' id='octoslack_event_" + internalName + "_IntervalTime' "
-                    + (useDataBind ? "data-bind='value: settings.plugins.Octoslack.supported_events." + internalName + ".IntervalTime'" : "")
-                    + ">");
-	        eventHtml.push("            <div class='octoslack_label octoslack_action_label'>Interval - Time (minutes)</div>");
-	        eventHtml.push("            <br/>")
-	        eventHtml.push("            <small class='muted'>");
-	        eventHtml.push("                0 = disabled");
-	        eventHtml.push("                <br/>");
-	        eventHtml.push("                A value of 5 would indicate a heartbeat message should be sent every 5 minutes ");
-	        eventHtml.push("            </small>");
-	        eventHtml.push("        </div>");
-	        eventHtml.push("        <br/>");
             }
 
             //ChannelOverride
@@ -798,6 +838,8 @@ var Octoslack = {
 	        eventHtml.push("            <br/>")
 	        eventHtml.push("            <small class='muted'>");
 	        eventHtml.push("                Upload rendered timelapse movie via the configured Snapshot Hosting option. Enabling this option will delay publishing of this event to Slack until after the timelapse has been uploaded.");
+	        eventHtml.push("                <br/>")
+	        eventHtml.push("                NOTE: The timelapse movie will only be uploaded if the event notification or system command are enabled")
 	        eventHtml.push("            </small>");
 	        eventHtml.push("        </div>");
 
@@ -877,12 +919,68 @@ var Octoslack = {
 
             eventHtml.push("            </select>");
 	    eventHtml.push("            <div class='octoslack_label octoslack_action_label'>Pushover Priority</div>");
+
+	    eventHtml.push("        </div>");
+	    eventHtml.push("    </div>"); //End notification section
+	    eventHtml.push("    <br/>");
+
+            //System command enabled
+	    eventHtml.push("        <div class='octoprint_config_row'>");
+	    eventHtml.push("            <input type='checkbox' class='octoslack_checkbox_margin_override octoslack_config_group_title' id='octoslack_event_" + internalName + "_commandenabled' "
+                + (useDataBind ? "data-bind='checked: settings.plugins.Octoslack.supported_events." + internalName + ".CommandEnabled'" : "")
+                + (customCommandEnabled ? " checked " : " ")
+                + ">");
+	    eventHtml.push("            <span class='octoslack_action_label octoslack_config_group_title' onclick=\"$('#octoslack_event_" + internalName + "_commandenabled').trigger('click')\">Enable system command</span>");
 	    eventHtml.push("        </div>");
 
+	    eventHtml.push("    <div class='octoslack_small_config_group'>"); //Start command section
 
-            if(action_text != null && action_handler != null)
-                eventHtml.push("        <div class='octoslack_align_right' style='width: 100%;'><button onclick='" + action_handler + "'>" + this.escapeHtml(action_text) + "</button></div>");
+	    //CaptureCommandReturnCode
+	    eventHtml.push("        <div class='octoprint_config_row'>");
+	    eventHtml.push("            <input type='checkbox' class='octoslack_checkbox_margin_override' id='octoslack_event_" + internalName + "_capturecommandreturncode' "
+                + (useDataBind ? "data-bind='checked: settings.plugins.Octoslack.supported_events." + internalName + ".CaptureCommandReturnCode'" : "")
+                + (customCaptureCommandReturnCode ? " checked " : " ")
+                + ">");
+	    eventHtml.push("            <span class='octoslack_action_label' onclick=\"$('#octoslack_event_" + internalName + "_capturecommandreturncode').trigger('click')\">Include command return code in notification</span>");
 	    eventHtml.push("        </div>");
+	    eventHtml.push("        <small class='muted'>");
+	    eventHtml.push("            Only applicable if the event notification is enabled");
+	    eventHtml.push("        </small>");
+
+	    //CaptureCommandOutput
+	    eventHtml.push("        <div class='octoprint_config_row'>");
+	    eventHtml.push("            <input type='checkbox' class='octoslack_checkbox_margin_override' id='octoslack_event_" + internalName + "_capturecommandoutput' "
+                + (useDataBind ? "data-bind='checked: settings.plugins.Octoslack.supported_events." + internalName + ".CaptureCommandOutput'" : "")
+                + (customCaptureCommandOutput ? " checked " : " ")
+                + ">");
+	    eventHtml.push("            <span class='octoslack_action_label' onclick=\"$('#octoslack_event_" + internalName + "_capturecommandoutput').trigger('click')\">Include command output in notification</span>");
+	    eventHtml.push("        </div>");
+	    eventHtml.push("        <small class='muted'>");
+	    eventHtml.push("            Only applicable if the event notification is enabled");
+	    eventHtml.push("        </small>");
+
+            //Command
+	    eventHtml.push("        <div class='octoprint_config_row'>");
+	    eventHtml.push("            <input type='text' class='octoslack_width_auto' size='55' id='octoslack_event_" + internalName + "_command' "
+                + (useDataBind ? "data-bind='value: settings.plugins.Octoslack.supported_events." + internalName + ".Command'" : " value='" + this.escapeHtml(customCommand) + "' ")
+                + ">");
+	    eventHtml.push("            <div class='octoslack_label octoslack_action_label'>Command</div>");
+	    eventHtml.push("        </div>");
+	    eventHtml.push("        <small class='muted'>");
+	    eventHtml.push("            NOTE: Execution of a script will likely require the script interpreter - e.g. <strong>sh /path/myscript.sh</strong>");
+	    eventHtml.push("            <br/>");
+	    eventHtml.push("            NOTE: Commands are executed as background processes but long running commands should be avoided to preserve OctoPrint resources");
+	    eventHtml.push("            <br/>");
+	    eventHtml.push("            NOTE: Command execution and event notification logic run in parallel, except when the above options to include the command return code or command output in the notification have been enabled. When enabled, the event notification will be delayed up to 10 seconds to allow for command to complete and outputs collected");
+	    eventHtml.push("        </small>");
+	    eventHtml.push("    </div>"); //End command section
+
+            if(action_text != null && action_handler != null) {
+	        eventHtml.push("    <br/>");
+                eventHtml.push("<div class='octoslack_align_right' style='width: 100%;'><button onclick='" + action_handler + "' rowContainerId='" + rowContainerId + "'>" + this.escapeHtml(action_text) + "</button></div>");
+            }
+	    eventHtml.push("    <br/>");
+	    eventHtml.push("    </div>"); //End event
 	}
 
         return eventHtml.join("\n");
@@ -1024,7 +1122,7 @@ var Octoslack = {
 	var hidden_value = $("#octoslack_gcode_events_hidden").val();
 	var gcode_events = hidden_value == undefined || hidden_value.trim().length == 0 ? [] : eval(hidden_value);
 
-	var eventsHtml = this.buildOctoPrintEventConfigRow('GCODE', gcode_events, "Remove", "Octoslack.removeGcodeEventRow(event, this); return false;");
+	var eventsHtml = this.buildOctoPrintEventConfigRow('GCODE', gcode_events, "Remove G-code event", "Octoslack.removeGcodeEventRow(event, this); return false;");
         
         var gcode_events_container = $("#octoslack_gcode_events_container");
         gcode_events_container.html(eventsHtml);
@@ -1033,8 +1131,10 @@ var Octoslack = {
     addGcodeEventRow : function(e) {
         var gcode_events_container = $("#octoslack_gcode_events_container");
 
+	var internal_name = String(Date.now())
+
 	var empty_event = [
-		{ "InternalName" : String(Date.now()), 
+		{ "InternalName" : internal_name, 
                   "GcodeType" : "sent", 
                   "Gcode" : "", 
                   "Color" : "good", 
@@ -1044,11 +1144,15 @@ var Octoslack = {
                   "Message" : "", 
                   "Fallback" : "",
                   "PushoverSound" : "",
-                  "PushoverPriority" : ""
+                  "PushoverPriority" : "",
+                  "CommandEnabled" : false, 
+                  "CaptureCommandReturnCode" : false, 
+                  "CommandCommandOutput" : false, 
+                  "Command" : "",
                 },
 	];
 
-        var new_event_html = this.buildOctoPrintEventConfigRow('GCODE', empty_event, "Remove", "Octoslack.removeGcodeEventRow(event, this); return false");
+        var new_event_html = this.buildOctoPrintEventConfigRow('GCODE', empty_event, "Remove G-code event", "Octoslack.removeGcodeEventRow(event, this); return false");
         gcode_events_container.append(new_event_html);
 
         this.changeConnectionType();
@@ -1071,9 +1175,16 @@ var Octoslack = {
     },
 
     removeGcodeEventRow : function(e, cell_elem) {
-        var buttonElem = cell_elem.parentNode;
-        var rowElem = buttonElem.parentNode;
-        rowElem.parentNode.removeChild(rowElem);
+	var rowContainerId = cell_elem.getAttribute("rowContainerId");
+	if(rowContainerId === undefined)
+            return;
+
+	
+	var gcodeEventContainer = $("#" + rowContainerId);
+	if(gcodeEventContainer === undefined)
+            return;
+
+	gcodeEventContainer.remove();
     },
 
     storeGcodeEvents : function() {
@@ -1084,7 +1195,7 @@ var Octoslack = {
 
         gcode_events_container.children().each(function() {
             var id = this.getAttribute('id')
-            if(!id.startsWith("GCODE_"))
+            if(id == undefined || !id.startsWith("GCODE_"))
                 return;
 
             var internalName = this.getAttribute('internalname');
@@ -1102,6 +1213,10 @@ var Octoslack = {
             var fallback = $("#octoslack_event_" + internalName + "_fallback").val();
             var pushoverSound = $("#octoslack_event_" + internalName + "_PushoverSound").val().trim();
             var pushoverPriority = $("#octoslack_event_" + internalName + "_PushoverPriority").val().trim();
+            var commandEnabled = $("#octoslack_event_" + internalName + "_commandenabled").is(':checked');
+            var captureCommandReturnCode = $("#octoslack_event_" + internalName + "_capturecommandreturncode").is(':checked');
+            var captureCommandOutput = $("#octoslack_event_" + internalName + "_capturecommandoutput").is(':checked');
+            var command = $("#octoslack_event_" + internalName + "_command").val();
 	
             gcode_events.push({ "InternalName" : internalName, 
                                   "Gcode" : gcode, 
@@ -1115,6 +1230,10 @@ var Octoslack = {
                                   "Fallback" : fallback,
                                   "PushoverSound" : pushoverSound,
                                   "PushoverPriority" : pushoverPriority,
+                                  "CommandEnabled" : commandEnabled,
+                                  "CaptureCommandReturnCode" : captureCommandReturnCode,
+                                  "CaptureCommandOutput" : captureCommandOutput,
+                                  "Command" : command,
                                 });
         });
 
