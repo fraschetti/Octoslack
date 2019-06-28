@@ -138,10 +138,12 @@
                         NOTE: Switching to or from the API Token connection method requires an OctoPrint restart to either establish or close the associated websocket connection
                     </small>
                 </div>
+                <br/>
 	        <div class="octoprint_config_row">
                     <input type="checkbox" class="octoslack_valign octoslack_checkbox_margin_override" id="octoslack_bot_commands" data-bind="checked: settings.plugins.Octoslack.slack_apitoken_config.enable_commands">
                     <div class="octoslack_label octoslack_action_label" onclick="$('#octoslack_bot_commands').trigger('click')">Listen for commands</div>
-	            <br/>
+                </div>
+	        <div class="octoprint_config_row">
 	            <small class="muted">
 			    The API Token allows for bi-directional communication between client and server meaning this plugin can receive and react to messages.
 			    <br/>
@@ -155,21 +157,59 @@
 			    <br/>
 			    (where @botname must match the bot name configured in Slack and as opposed to the Username configured for this plugin)
 			    <br/>
-			    <p class="octoslack_indented">
-				    The supported commands are:
-				    <br/>
-				    <strong>help</strong> - Displays this list of commands
-				    <br/>
-				    <strong>status</strong> - Display the current print job status
-				    <br/>
-				    <strong>stop</strong> - Stop the current print
-				    <br/>
-				    <strong>pause</strong> - Pause the current print
-				    <br/>
-				    <strong>resume</strong> - Resume a paused print
-			    </p>
-			    <br/>
 	  	    </small>
+		    <br/>
+                    <table border="1" cellspacing="8" cellpadding="8">
+                        <thead>
+                        <tr bgcolor="#EEEEEE">
+                            <td><strong>Command</strong></td>
+                            <td><strong>Description</strong></td>
+                            <td><strong>Enabled</strong></td>
+                            <td><strong>Restricted*</strong></td>
+                        </tr>
+                        </thead>
+                        <tr>
+                            <td><strong>help<strong></td>
+                            <td>Displays this list of commands</td>
+                            <td align="center"><input type="checkbox" class="octoslack_valign octoslack_checkbox_margin_override" data-bind="checked: settings.plugins.Octoslack.slack_rtm_enabled_commands.help.enabled"></td>
+                            <td align="center"><input type="checkbox" class="octoslack_valign octoslack_checkbox_margin_override" data-bind="checked: settings.plugins.Octoslack.slack_rtm_enabled_commands.help.restricted"></td>
+                        </tr>
+                        <tr>
+                            <td><strong>status</strong></td>
+                            <td>Display the current print job status</td>
+                            <td align="center"><input type="checkbox" class="octoslack_valign octoslack_checkbox_margin_override" data-bind="checked: settings.plugins.Octoslack.slack_rtm_enabled_commands.status.enabled"></td>
+                            <td align="center"><input type="checkbox" class="octoslack_valign octoslack_checkbox_margin_override" data-bind="checked: settings.plugins.Octoslack.slack_rtm_enabled_commands.status.restricted"></td>
+                        </tr>
+                        <tr>
+                            <td><strong>stop</strong></td>
+                            <td>Stop the current print</td>
+                            <td align="center"><input type="checkbox" class="octoslack_valign octoslack_checkbox_margin_override" data-bind="checked: settings.plugins.Octoslack.slack_rtm_enabled_commands.stop.enabled"></td>
+                            <td align="center"><input type="checkbox" class="octoslack_valign octoslack_checkbox_margin_override" data-bind="checked: settings.plugins.Octoslack.slack_rtm_enabled_commands.stop.restricted"></td>
+                        </tr>
+                        <tr>
+                            <td><strong>pause</strong></td>
+                            <td>Pause the current print</td>
+                            <td align="center"><input type="checkbox" class="octoslack_valign octoslack_checkbox_margin_override" data-bind="checked: settings.plugins.Octoslack.slack_rtm_enabled_commands.pause.enabled"></td>
+                            <td align="center"><input type="checkbox" class="octoslack_valign octoslack_checkbox_margin_override" data-bind="checked: settings.plugins.Octoslack.slack_rtm_enabled_commands.pause.restricted"></td>
+                        </tr>
+                        <tr>
+                            <td><strong>resume</strong></td>
+                            <td>Resume a paused print</td>
+                            <td align="center"><input type="checkbox" class="octoslack_valign octoslack_checkbox_margin_override" data-bind="checked: settings.plugins.Octoslack.slack_rtm_enabled_commands.resume.enabled"></td>
+                            <td align="center"><input type="checkbox" class="octoslack_valign octoslack_checkbox_margin_override" data-bind="checked: settings.plugins.Octoslack.slack_rtm_enabled_commands.resume.restricted"></td>
+                        </tr>
+                    </table>
+	  	    <small class="muted">
+                        *Restricted commands can only be executed by one of the configured authorized users. This option is ignored (all commands are accessible) If not authorized users are specified
+	  	    </small>
+		    <br/>
+                    <div class="octoprint_config_row">
+                        <span class="octoslack_label">Authorized users</span>
+                        <input type="text" class="octoslack_width_auto" size="60" data-bind="value: settings.plugins.Octoslack.slack_rtm_authorized_users">
+		        </br>
+		        <small class="muted">A comma-separated list (username1,username2,username3) of Slack usernames who can execute restricted commands. If no users are provided, all commands are treated as unrestricted</small>
+                    </div>
+		    <br/>
 	        </div>
                 <div class="octoprint_config_row">
                     <span class="octoslack_label">Confirmation emoji</span>
@@ -188,6 +228,12 @@
                     <input type="text" class="octoslack_width_auto" size="15" data-bind="value: settings.plugins.Octoslack.slack_apitoken_config.commands_negative_reaction">
                     <br/>
 		    <small class="muted">If commands are enabled, this emoji is added to invalid commands as well as valid commands that cannot be executed (e.g. <strong>pause</strong> is called on an already paused print)</small>
+                </div>
+                <div class="octoprint_config_row">
+                    <span class="octoslack_label">Unauthorized emoji</span>
+                    <input type="text" class="octoslack_width_auto" size="15" data-bind="value: settings.plugins.Octoslack.slack_apitoken_config.commands_unauthorized_reaction">
+                    <br/>
+		    <small class="muted">If commands are enabled and an authorized users list provided, this emoji will be returned to any restricted command issues by an unauthorized user</small>
                 </div>
             </div>
             <div id="octolack_webhook_group" class="octoslack_hidden">

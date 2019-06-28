@@ -77,6 +77,7 @@ class OctoslackPlugin(
                 "commands_positive_reaction": ":thumbsup:",
                 "commands_negative_reaction": ":thumbsdown:",
                 "commands_processing_reaction": ":stopwatch:",
+                "commands_unauthorized_reaction": ":lock:",
             },
             "slack_webhook_config": {"webhook_url": ""},
             "slack_identity": {
@@ -85,6 +86,14 @@ class OctoslackPlugin(
                 "icon_emoji": "",
                 "username": "",
             },
+            "slack_rtm_enabled_commands": {
+                "help": {"enabled": True, "restricted": False},
+                "status": {"enabled": True, "restricted": False},
+                "stop": {"enabled": True, "restricted": False},
+                "pause": {"enabled": True, "restricted": False},
+                "resume": {"enabled": True, "restricted": False},
+            },
+            "slack_rtm_authorized_users": "",
             "channel": "",
             "pushbullet_config": {"access_token": "", "channel": ""},
             "pushover_config": {"app_token": "", "user_key": ""},
@@ -1467,27 +1476,84 @@ class OctoslackPlugin(
         replacement_params["{ip_address}"] = ips_str
 
         if includeSupportedCommands:
-            text_arr.append(
-                bold_text_start
-                + "help"
-                + bold_text_end
-                + " - Displays this list of commands"
+            enabled_commands = self._settings.get(
+                ["slack_rtm_enabled_commands"], merged=True
             )
-            text_arr.append(
-                bold_text_start
-                + "status"
-                + bold_text_end
-                + " - Display the current print job status"
+
+            unauthorized_reaction = self._settings.get(
+                ["slack_apitoken_config"], merged=True
+            ).get("commands_unauthorized_reaction")
+
+            authorized_users = self._settings.get(
+                ["slack_rtm_authorized_users"], merged=True
             )
-            text_arr.append(
-                bold_text_start + "stop" + bold_text_end + " - Stop the current print"
-            )
-            text_arr.append(
-                bold_text_start + "pause" + bold_text_end + " - Pause the current print"
-            )
-            text_arr.append(
-                bold_text_start + "resume" + bold_text_end + " - Resume a paused print"
-            )
+            if len(authorized_users.strip()) == 0:
+                authorized_users = None
+
+            if enabled_commands["help"]["enabled"]:
+                text_arr.append(
+                    bold_text_start
+                    + "help"
+                    + bold_text_end
+                    + " - Displays this list of commands"
+                    + (
+                        " " + unauthorized_reaction
+                        if authorized_users and enabled_commands["help"]["restricted"]
+                        else ""
+                    )
+                )
+
+            if enabled_commands["status"]["enabled"]:
+                text_arr.append(
+                    bold_text_start
+                    + "status"
+                    + bold_text_end
+                    + " - Display the current print job status"
+                    + (
+                        " " + unauthorized_reaction
+                        if authorized_users and enabled_commands["status"]["restricted"]
+                        else ""
+                    )
+                )
+
+            if enabled_commands["stop"]["enabled"]:
+                text_arr.append(
+                    bold_text_start
+                    + "stop"
+                    + bold_text_end
+                    + " - Stop the current print"
+                    + (
+                        " " + unauthorized_reaction
+                        if authorized_users and enabled_commands["stop"]["restricted"]
+                        else ""
+                    )
+                )
+
+            if enabled_commands["pause"]["enabled"]:
+                text_arr.append(
+                    bold_text_start
+                    + "pause"
+                    + bold_text_end
+                    + " - Pause the current print"
+                    + (
+                        " " + unauthorized_reaction
+                        if authorized_users and enabled_commands["pause"]["restricted"]
+                        else ""
+                    )
+                )
+
+            if enabled_commands["resume"]["enabled"]:
+                text_arr.append(
+                    bold_text_start
+                    + "resume"
+                    + bold_text_end
+                    + " - Resume a paused print"
+                    + (
+                        " " + unauthorized_reaction
+                        if authorized_users and enabled_commands["resume"]["restricted"]
+                        else ""
+                    )
+                )
 
         error = None
         if "error" in event_payload:
@@ -1814,6 +1880,15 @@ class OctoslackPlugin(
 
         self._logger.debug("Slack RTM Read: " + json.dumps(message))
 
+        source_userid = message.get("user")
+        source_username = self.get_slack_username(slackAPIToken, source_userid)
+        self._logger.debug(
+            "Slack RTM message source UserID: "
+            + str(source_userid)
+            + ", Username: "
+            + str(source_username)
+        )
+
         channel = message["channel"]
         timestamp = message["ts"]
 
@@ -1830,6 +1905,9 @@ class OctoslackPlugin(
         processing_reaction = self._settings.get(
             ["slack_apitoken_config"], merged=True
         ).get("commands_processing_reaction")
+        unauthorized_reaction = self._settings.get(
+            ["slack_apitoken_config"], merged=True
+        ).get("commands_unauthorized_reaction")
 
         if not positive_reaction == None:
             positive_reaction = positive_reaction.strip()
@@ -1848,16 +1926,57 @@ class OctoslackPlugin(
             ):
                 processing_reaction = processing_reaction[1:-1].strip()
 
+        if not unauthorized_reaction == None:
+            unauthorized_reaction = unauthorized_reaction.strip()
+            if unauthorized_reaction.startswith(":") and unauthorized_reaction.endswith(
+                ":"
+            ):
+                unauthorized_reaction = unauthorized_reaction[1:-1].strip()
+
         sent_processing_reaction = False
 
-        if command == "help":
-            self._logger.debug("Slack RTM - help command")
-            self.handle_event("Help", channel, {}, True, False, None)
-            reaction = positive_reaction
+        enabled_commands = self._settings.get(
+            ["slack_rtm_enabled_commands"], merged=True
+        )
+        authorized_users = self._settings.get(
+            ["slack_rtm_authorized_users"], merged=True
+        )
 
-        elif command == "stop":
-            self._logger.debug("Slack RTM - stop command")
-            if self._printer.is_printing():
+        authorized_user_lookup = {}
+        for user in authorized_users.split(","):
+            user = user.strip().lower()
+            if len(user) > 0:
+                authorized_user_lookup[user] = True
+
+        if len(authorized_user_lookup) == 0:
+            authorized_user_lookup = None
+
+        authorized = self.is_rtm_command_authorized_user(
+            authorized_user_lookup, source_username, enabled_commands, command
+        )
+
+        if command == "help" and enabled_commands["help"]["enabled"]:
+            self._logger.info(
+                "Slack RTM - help command - user: "
+                + source_username
+                + ", authorized: "
+                + str(authorized)
+            )
+            if not authorized:
+                reaction = unauthorized_reaction
+            else:
+                self.handle_event("Help", channel, {}, True, False, None)
+                reaction = positive_reaction
+        elif command == "stop" and enabled_commands["stop"]["enabled"]:
+            self._logger.info(
+                "Slack RTM - stop command - user: "
+                + source_username
+                + ", authorized: "
+                + str(authorized)
+            )
+            if not authorized:
+                reaction = unauthorized_reaction
+            elif self._printer.is_printing():
                 ##Send processing reaction
                 sent_processing_reaction = True
                 self.add_message_reaction(
@@ -1868,42 +1987,64 @@ class OctoslackPlugin(
                 reaction = positive_reaction
             else:
                 reaction = negative_reaction
-        elif command == "pause":
-            self._logger.debug("Slack RTM - pause command")
-            if self._printer.is_printing():
-                ##Send processing reaction
-                sent_processing_reaction = True
-
-                self.add_message_reaction(
-                    slackAPIToken, channel, timestamp, processing_reaction, False
-                )
-                self._printer.toggle_pause_print()
-                reaction = positive_reaction
-            else:
-                reaction = negative_reaction
-        elif command == "resume":
-            self._logger.debug("Slack RTM - resume command")
-            if self._printer.is_paused():
-                ##Send processing reaction
-                sent_processing_reaction = True
-                self.add_message_reaction(
-                    slackAPIToken, channel, timestamp, processing_reaction, False
-                )
-
-                self._printer.toggle_pause_print()
-                reaction = positive_reaction
-            else:
-                reaction = negative_reaction
-        elif command == "status":
-            ##Send processing reaction
-            self._logger.debug("Slack RTM - status command")
-            sent_processing_reaction = True
-
-            self.add_message_reaction(
-                slackAPIToken, channel, timestamp, processing_reaction, False
+        elif command == "pause" and enabled_commands["pause"]["enabled"]:
+            self._logger.info(
+                "Slack RTM - pause command - user: "
+                + source_username
+                + ", authorized: "
+                + str(authorized)
             )
-            self.handle_event("Progress", channel, {}, True, False, None)
-            reaction = positive_reaction
+            if not authorized:
+                reaction = unauthorized_reaction
+            elif self._printer.is_printing():
+                ##Send processing reaction
+                sent_processing_reaction = True
+
+                self.add_message_reaction(
+                    slackAPIToken, channel, timestamp, processing_reaction, False
+                )
+                self._printer.toggle_pause_print()
+                reaction = positive_reaction
+            else:
+                reaction = negative_reaction
+        elif command == "resume" and enabled_commands["resume"]["enabled"]:
+            self._logger.info(
+                "Slack RTM - resume command - user: "
+                + source_username
+                + ", authorized: "
+                + str(authorized)
+            )
+            if not authorized:
+                reaction = unauthorized_reaction
+            elif self._printer.is_paused():
+                ##Send processing reaction
+                sent_processing_reaction = True
+                self.add_message_reaction(
+                    slackAPIToken, channel, timestamp, processing_reaction, False
+                )
+
+                self._printer.toggle_pause_print()
+                reaction = positive_reaction
+            else:
+                reaction = negative_reaction
+        elif command == "status" and enabled_commands["status"]["enabled"]:
+            ##Send processing reaction
+            self._logger.info(
+                "Slack RTM - status command - user: "
+                + source_username
+                + ", authorized: "
+                + str(authorized)
+            )
+            if not authorized:
+                reaction = unauthorized_reaction
+            else:
+                sent_processing_reaction = True
+
+                self.add_message_reaction(
+                    slackAPIToken, channel, timestamp, processing_reaction, False
+                )
+                self.handle_event("Progress", channel, {}, True, False, None)
+                reaction = positive_reaction
 
         else:
             reaction = negative_reaction
@@ -1914,6 +2055,56 @@ class OctoslackPlugin(
         if sent_processing_reaction:
             self.add_message_reaction(
                 slackAPIToken, channel, timestamp, processing_reaction, True
+            )
+
+    def is_rtm_command_authorized_user(
+        self, authorized_users, username, enabled_commands, command
+    ):
+        if authorized_users == None or len(authorized_users) == 0:
+            return True
+
+        auth_required = enabled_commands[command]["restricted"]
+        if not auth_required:
+            return True
+
+        username = username.strip().lower()
+        if username in authorized_users:
+            return True
+
+        return False
+
+    def get_slack_username(self, slackAPIToken, userid):
+        try:
+            if userid == None:
+                return
+
+            userid = userid.strip()
+
+            if len(userid) == 0:
+                return
+
+            slackAPIConnection = Slacker(slackAPIToken, timeout=SLACKER_TIMEOUT)
+
+            self._logger.debug(
+                "Retrieving username for Slack RTM message - User ID: " + userid
+            )
+
+            user_info_rsp = slackAPIConnection.users.info(userid)
+
+            self._logger.debug(
+                "Slack user info rsp for User ID: "
+                + userid
+                + ", Response: "
+                + json.dumps(user_info_rsp.body)
+            )
+
+            return user_info_rsp.body["user"]["name"]
+        except Exception as e:
+            self._logger.exception(
+                "Error retrieving username for Slack RTM message - User ID: "
+                + userid
+                + ", Error: "
+                + str(e.message)
             )
 
     def add_message_reaction(self, slackAPIToken, channel, timestamp, reaction, remove):
@@ -2696,6 +2887,7 @@ class OctoslackPlugin(
                             slackAPIToken, timeout=SLACKER_TIMEOUT
                         )
 
+                        ##TODO this shouldn't apply to @octoslack status RTM requests
                         if event == "Progress":
                             if (
                                 self._bot_progress_last_req
