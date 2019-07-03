@@ -86,7 +86,7 @@ An OctoPrint plugin for monitoring your printer and prints via Slack, Mattermost
 > ### Print Started ###
 > ![Matrix/Riot.im - Print started example](/screenshots/Octoslack-Matrix-PrintStarted.png?raw=true)
 
-# G-code & System command Example #
+# G-code event & System command Example #
 
-> ### G-code & System command ###
-> ![G-code & System command Example](/screenshots/Octoslack-GcodeEventCommand.png?raw=true)
+> ### G-code event & System command ###
+> ![G-code event & System command Example](/screenshots/Octoslack-GcodeEventCommand.png?raw=true)
