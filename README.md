@@ -5,12 +5,14 @@ An OctoPrint plugin for monitoring your printer and prints via Slack, Mattermost
  - Support for Slack, Mattermost, Pushbullet, Pushover, Rocket.Chat, & Matrix based platforms (e.g. Riot)
  - Monitor both print status as well as printer connectivity status
  - Respond to Slack commands to check print status or cancel/pause/resume a print
+     - Each command can be individually enabled/disbaled or flagged as restricted which limits the command(s) to specific users
      - Requires use of the Slack API Token
  - Customizable messages
      - Slack and Mattermost support for a fallback message (e.g. mobile notification)
      - Pushover support for event specific sound and priority settings
  - Support for posting to one more channels as well as event level channel overrides
  - Support for inclusion of RasPi temperature, bed temperature, nozzle temperates, nozzle height, and device IP(s)
+ - Support for local system command execution
  - Slack bot name/icon/emoji customizations
      - Requires use of the Slack API Token
  - Optional inclusion of printer snapshot images with each message
@@ -79,8 +81,12 @@ An OctoPrint plugin for monitoring your printer and prints via Slack, Mattermost
 > ### Print Started ###
 > ![Rocket.Chat - Print started example](/screenshots/Octoslack-RocketChat-PrintStarted.png?raw=true)
 
-
 # Matrix/Riot.im Example #
 
 > ### Print Started ###
 > ![Matrix/Riot.im - Print started example](/screenshots/Octoslack-Matrix-PrintStarted.png?raw=true)
+
+# G-code & System command Example #
+
+> ### G-code & System command ###
+> ![G-code & System command Example](/screenshots/Octoslack-GcodeEventCommand.png?raw=true)
