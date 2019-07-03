@@ -2887,7 +2887,7 @@ class OctoslackPlugin(
                             slackAPIToken, timeout=SLACKER_TIMEOUT
                         )
 
-                        ##TODO this shouldn't apply to @octoslack status RTM requests
+                        ##Applies to both standard Progress events as well as '@bot status' Slack RTM commands
                         if event == "Progress":
                             if (
                                 self._bot_progress_last_req

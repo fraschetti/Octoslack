@@ -697,7 +697,7 @@ var Octoslack = {
                 customSettingsHtml.push("            <div class='octoslack_label octoslack_action_label'>Progress Update Method</div>");
                 customSettingsHtml.push("            <br/>");
                 customSettingsHtml.push("            <small class='muted'>");
-                customSettingsHtml.push('                If "In-place" is selected, rather than sending a new message to update the progress, the existing message will be updated in place. Requires Slack API Token.');
+                customSettingsHtml.push('                If "In-place" is selected, rather than sending a new message for each progress update (including the \'@bot status\' command), the existing message will be updated in place. Requires Slack API Token.');
                 customSettingsHtml.push("            </small>");
                 customSettingsHtml.push("        <br/>");
                 customSettingsHtml.push("        </div>");
