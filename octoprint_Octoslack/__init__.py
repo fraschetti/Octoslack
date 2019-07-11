@@ -962,9 +962,13 @@ class OctoslackPlugin(
                 self.stop_progress_timer()
                 self.print_cancel_time = time.time()
                 self._bot_progress_last_req = None
+                with self._bot_progress_last_snapshot_queue.mutex:
+                    self._bot_progress_last_snapshot_queue.queue.clear()
             elif event == "PrintFailed":
                 self.stop_progress_timer()
                 self._bot_progress_last_req = None
+                with self._bot_progress_last_snapshot_queue.mutex:
+                    self._bot_progress_last_snapshot_queue.queue.clear()
 
                 ignore_cancel_fail_event = self._settings.get(
                     ["ignore_cancel_fail_event"], merged=True
@@ -984,12 +988,15 @@ class OctoslackPlugin(
                 self.print_cancel_time = None
                 self.last_trigger_height = 0.0
                 self._bot_progress_last_req = None
-                self._bot_progress_last_snapshot = None
+                with self._bot_progress_last_snapshot_queue.mutex:
+                    self._bot_progress_last_snapshot_queue.queue.clear()
                 self._slack_next_progress_snapshot_time = 0
             elif event == "PrintDone":
                 self.stop_progress_timer()
                 self.print_cancel_time = None
                 self._bot_progress_last_req = None
+                with self._bot_progress_last_snapshot_queue.mutex:
+                    self._bot_progress_last_snapshot_queue.queue.clear()
             elif event == "ZChange":
                 if self.process_zheight_change(payload):
                     self.handle_event("Progress", None, payload, False, False, None)
@@ -2322,7 +2329,7 @@ class OctoslackPlugin(
         return time_str
 
     _bot_progress_last_req = None
-    _bot_progress_last_snapshot = None
+    _bot_progress_last_snapshot_queue = Queue.Queue()
     _slack_next_progress_snapshot_time = 0
 
     def execute_command(self, event, command, capture_output, command_rsp):
@@ -2911,8 +2918,6 @@ class OctoslackPlugin(
                                 )
                                 self._bot_progress_last_req = apiRsp
                         else:
-                            self._bot_progress_last_req = None
-                            self._bot_progress_last_snapshot = None
                             apiRsp = slackAPIConnection.chat.post_message(
                                 channel,
                                 text="",
@@ -2926,6 +2931,7 @@ class OctoslackPlugin(
                             "Slack API message send response: " + apiRsp.raw
                         )
                         if snapshot_msg:
+                            ##TODO CHRIS figure out if the in-place can be used with non-Slack hosting types
                             ##TODO Doing the upload here makes it difficult to append any error messages to the slack message.
                             ##consider doing the upload first
                             hosted_url, error_msgs, slack_resp = self.upload_slack_asset(
@@ -2936,12 +2942,20 @@ class OctoslackPlugin(
                                 None,
                             )
 
-                            if snapshot_msg.get("file_"):
-                                self._logger.debug(
-                                    "Deleting Slack asset: "
-                                    + str(snapshot_msg["file_"])
-                                )
-                                os.remove(snapshot_msg["file_"])
+                            if snapshot_msg.get("local_file"):
+                                try:
+                                    self._logger.debug(
+                                        "Deleting local Slack asset: "
+                                        + str(snapshot_msg["local_file"])
+                                    )
+                                    os.remove(snapshot_msg["local_file"])
+                                except Exception as e:
+                                    self._logger.error(
+                                        "Deletion of local Slack asset failed. Local path: {}, Error: {}".format(
+                                            snapshot_msg["local_file"], e
+                                        )
+                                    )
+
                             if event == "Progress":
                                 # bump out the 'next time' again as an upload can take some time
                                 _slack_next_progress_snapshot_time = (
@@ -2949,20 +2963,34 @@ class OctoslackPlugin(
                                 )
                                 if (
                                     progress_update_method == "INPLACE"
-                                    and self._bot_progress_last_snapshot
+                                    and self._bot_progress_last_snapshot_queue.qsize()
+                                    > 0
                                 ):
-                                    try:
-                                        fid = self._bot_progress_last_snapshot.body[
-                                            "file"
-                                        ]["id"]
-                                        slackAPIConnection.files.delete(fid)
-                                    except Exception as e:
-                                        self._logger.error(
-                                            "Slack snapshot deletion error: {}".format(
-                                                e
-                                            )
+                                    while (
+                                        not self._bot_progress_last_snapshot_queue.empty()
+                                    ):
+                                        prev_snapshot = (
+                                            self._bot_progress_last_snapshot_queue.get()
                                         )
-                                self._bot_progress_last_snapshot = slack_resp
+
+                                        if prev_snapshot == None:
+                                            break
+
+                                        fid = None
+                                        try:
+                                            fid = prev_snapshot.body["file"]["id"]
+                                            self._logger.debug(
+                                                "Deleting Slack snapshot: " + str(fid)
+                                            )
+                                            slackAPIConnection.files.delete(fid)
+                                        except Exception as e:
+                                            self._logger.error(
+                                                "Slack snapshot deletion error. Slack FileID: {}, Error: {}".format(
+                                                    str(fid), e
+                                                )
+                                            )
+
+                                self._bot_progress_last_snapshot_queue.put(slack_resp)
                     except Exception as e:
                         self._logger.exception(
                             "Slack API message send error: " + str(e)
