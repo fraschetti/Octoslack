@@ -2931,7 +2931,6 @@ class OctoslackPlugin(
                             "Slack API message send response: " + apiRsp.raw
                         )
                         if snapshot_msg:
-                            ##TODO CHRIS figure out if the in-place can be used with non-Slack hosting types
                             ##TODO Doing the upload here makes it difficult to append any error messages to the slack message.
                             ##consider doing the upload first
                             hosted_url, error_msgs, slack_resp = self.upload_slack_asset(
@@ -3700,6 +3699,9 @@ class OctoslackPlugin(
                                 + str(self.tmp_imgur_client.credits)
                             )
                         error_msgs.append("Imgur error: " + str(ie.error_message))
+                        error_msgs.append(
+                            "Imgur credits: " + str(self.tmp_imgur_client.credits)
+                        )
                     except ImgurClientRateLimitError as rle:
                         self._logger.exception(
                             "Failed to upload snapshot to Imgur (ImgurClientRateLimitError): "
@@ -3711,6 +3713,9 @@ class OctoslackPlugin(
                                 + str(self.tmp_imgur_client.credits)
                             )
                         error_msgs.append("Imgur error: " + str(rle))
+                        error_msgs.append(
+                            "Imgur credits: " + str(self.tmp_imgur_client.credits)
+                        )
                     except Exception as e:
                         self._logger.exception(
                             "Failed to upload snapshot to Imgur (Exception): " + str(e)
