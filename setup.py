@@ -34,7 +34,7 @@ plugin_license = "MIT"
 
 # Any additional requirements besides OctoPrint should be listed here
 plugin_requires = [
-    "slackclient",
+    "slackclient<2.0.0",
     "slacker",
     "tinys3",
     "imgurpython",
