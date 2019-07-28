@@ -1681,7 +1681,7 @@ class OctoslackPlugin(
 
         connection_method = self.connection_method()
         if connection_method == None or connection_method != "APITOKEN":
-            self._logger.debug("Slack RMM client not enabled")
+            self._logger.debug("Slack RTM client not enabled")
             return
 
         slackAPIToken = self._settings.get(["slack_apitoken_config"], merged=True).get(
