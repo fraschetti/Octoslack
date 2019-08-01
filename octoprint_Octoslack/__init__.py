@@ -73,6 +73,7 @@ class OctoslackPlugin(
             "connection_method": "APITOKEN",
             "slack_apitoken_config": {
                 "api_token": "",
+                "alternate_bot_name": "",
                 "enable_commands": True,
                 "commands_positive_reaction": ":thumbsup:",
                 "commands_negative_reaction": ":thumbsdown:",
@@ -1874,7 +1875,14 @@ class OctoslackPlugin(
         ):
             return
 
-        if self.bot_user_id == None or message == None:
+        alternate_bot_name = self._settings.get(
+            ["slack_apitoken_config"], merged=True
+        ).get("alternate_bot_name")
+        alternate_bot_id = None
+        if not alternate_bot_name == None and len(alternate_bot_name.strip()) > 0:
+            alternate_bot_id = "@" + alternate_bot_name.strip()
+
+        if (self.bot_user_id == None and alternate_bot_id == None) or message == None:
             return
 
         if message.get("type") != "message" or message.get("text") == None:
@@ -1882,7 +1890,15 @@ class OctoslackPlugin(
 
         bot_id = "<@" + self.bot_user_id + ">"
 
-        if not bot_id in message.get("text", ""):
+        message_text = message.get("text", "")
+
+        matched_id = None
+
+        if bot_id in message_text:
+            matched_id = bot_id
+        elif alternate_bot_id in message_text:
+            matched_id = alternate_bot_id
+        else:
             return
 
         self._logger.debug("Slack RTM Read: " + json.dumps(message))
@@ -1899,7 +1915,7 @@ class OctoslackPlugin(
         channel = message["channel"]
         timestamp = message["ts"]
 
-        command = message["text"].split(bot_id)[1].strip().lower()
+        command = message["text"].split(matched_id)[1].strip().lower()
 
         reaction = ""
 
@@ -2068,6 +2084,10 @@ class OctoslackPlugin(
         self, authorized_users, username, enabled_commands, command
     ):
         if authorized_users == None or len(authorized_users) == 0:
+            return True
+
+        ##The failed command will be handled later
+        if not command in enabled_commands:
             return True
 
         auth_required = enabled_commands[command]["restricted"]
