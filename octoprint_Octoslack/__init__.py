@@ -3408,6 +3408,8 @@ class OctoslackPlugin(
         connection_method = self.connection_method()
 
         local_file_path, error_msgs = self.retrieve_snapshot_images()
+        if local_file_path == None:
+            return None, error_msgs, None
 
         dest_filename = local_file_path[local_file_path.rfind("/") + 1 :]
 
@@ -3976,10 +3978,10 @@ class OctoslackPlugin(
     def retrieve_snapshot_images(self):
         urls = []
 
-        localCamera = self._settings.globalGet(["webcam", "snapshot"])
-        localCameraFlipH = self._settings.globalGet(["webcam", "flipH"])
-        localCameraFlipV = self._settings.globalGet(["webcam", "flipV"])
-        localCameraRotate90 = self._settings.globalGet(["webcam", "rotate90"])
+        localCamera = self._settings.global_get(["webcam", "snapshot"])
+        localCameraFlipH = self._settings.global_get(["webcam", "flipH"])
+        localCameraFlipV = self._settings.global_get(["webcam", "flipV"])
+        localCameraRotate90 = self._settings.global_get(["webcam", "rotate90"])
 
         self._logger.debug(
             "Local camera settings - Snapshot URL:"
