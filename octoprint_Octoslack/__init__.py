@@ -160,6 +160,7 @@ class OctoslackPlugin(
                     "CaptureCommandReturnCode": False,
                     "CaptureCommandOutput": False,
                     "Command": "",
+                    "MinNotificationInterval": 0,
                 },
                 "Startup": {
                     "Enabled": False,
@@ -181,6 +182,7 @@ class OctoslackPlugin(
                     "CaptureCommandReturnCode": False,
                     "CaptureCommandOutput": False,
                     "Command": "",
+                    "MinNotificationInterval": 0,
                 },
                 "Shutdown": {
                     "Enabled": False,
@@ -202,6 +204,7 @@ class OctoslackPlugin(
                     "CaptureCommandReturnCode": False,
                     "CaptureCommandOutput": False,
                     "Command": "",
+                    "MinNotificationInterval": 0,
                 },
                 "Connecting": {
                     "Enabled": False,
@@ -223,6 +226,7 @@ class OctoslackPlugin(
                     "CaptureCommandReturnCode": False,
                     "CaptureCommandOutput": False,
                     "Command": "",
+                    "MinNotificationInterval": 0,
                 },
                 "Connected": {
                     "Enabled": False,
@@ -244,6 +248,7 @@ class OctoslackPlugin(
                     "CaptureCommandReturnCode": False,
                     "CaptureCommandOutput": False,
                     "Command": "",
+                    "MinNotificationInterval": 0,
                 },
                 "Disconnecting": {
                     "Enabled": False,
@@ -265,6 +270,7 @@ class OctoslackPlugin(
                     "CaptureCommandReturnCode": False,
                     "CaptureCommandOutput": False,
                     "Command": "",
+                    "MinNotificationInterval": 0,
                 },
                 "Disconnected": {
                     "Enabled": False,
@@ -286,6 +292,7 @@ class OctoslackPlugin(
                     "CaptureCommandReturnCode": False,
                     "CaptureCommandOutput": False,
                     "Command": "",
+                    "MinNotificationInterval": 0,
                 },
                 "Error": {
                     "Enabled": True,
@@ -307,6 +314,7 @@ class OctoslackPlugin(
                     "CaptureCommandReturnCode": False,
                     "CaptureCommandOutput": False,
                     "Command": "",
+                    "MinNotificationInterval": 0,
                 },
                 "PrintStarted": {
                     "Enabled": True,
@@ -328,6 +336,7 @@ class OctoslackPlugin(
                     "CaptureCommandReturnCode": False,
                     "CaptureCommandOutput": False,
                     "Command": "",
+                    "MinNotificationInterval": 0,
                 },
                 "PrintFailed": {
                     "Enabled": True,
@@ -349,6 +358,7 @@ class OctoslackPlugin(
                     "CaptureCommandReturnCode": False,
                     "CaptureCommandOutput": False,
                     "Command": "",
+                    "MinNotificationInterval": 0,
                 },
                 "PrintCancelling": {
                     "Enabled": True,
@@ -370,6 +380,7 @@ class OctoslackPlugin(
                     "CaptureCommandReturnCode": False,
                     "CaptureCommandOutput": False,
                     "Command": "",
+                    "MinNotificationInterval": 0,
                 },
                 "PrintCancelled": {
                     "Enabled": True,
@@ -391,6 +402,7 @@ class OctoslackPlugin(
                     "CaptureCommandReturnCode": False,
                     "CaptureCommandOutput": False,
                     "Command": "",
+                    "MinNotificationInterval": 0,
                 },
                 "PrintDone": {
                     "Enabled": True,
@@ -412,6 +424,7 @@ class OctoslackPlugin(
                     "CaptureCommandReturnCode": False,
                     "CaptureCommandOutput": False,
                     "Command": "",
+                    "MinNotificationInterval": 0,
                 },
                 ##Not a real event but we'll leverage the same config structure
                 "Progress": {
@@ -439,6 +452,7 @@ class OctoslackPlugin(
                     "CaptureCommandReturnCode": False,
                     "CaptureCommandOutput": False,
                     "Command": "",
+                    "MinNotificationInterval": 0,
                 },
                 ##Not a real event but we'll leverage the same config structure
                 "GcodeEvent": {
@@ -460,6 +474,7 @@ class OctoslackPlugin(
                     "CaptureCommandReturnCode": False,
                     "CaptureCommandOutput": False,
                     "Command": "",
+                    "MinNotificationInterval": 0,
                 },
                 ##Not a real event but we'll leverage the same config structure
                 "Heartbeat": {
@@ -482,6 +497,7 @@ class OctoslackPlugin(
                     "CaptureCommandReturnCode": False,
                     "CaptureCommandOutput": False,
                     "Command": "",
+                    "MinNotificationInterval": 0,
                 },
                 "PrintPaused": {
                     "Enabled": True,
@@ -502,6 +518,7 @@ class OctoslackPlugin(
                     "CaptureCommandReturnCode": False,
                     "CaptureCommandOutput": False,
                     "Command": "",
+                    "MinNotificationInterval": 0,
                 },
                 "PrintResumed": {
                     "Enabled": True,
@@ -522,6 +539,7 @@ class OctoslackPlugin(
                     "CaptureCommandReturnCode": False,
                     "CaptureCommandOutput": False,
                     "Command": "",
+                    "MinNotificationInterval": 0,
                 },
                 "MetadataAnalysisStarted": {
                     "Enabled": False,
@@ -542,6 +560,7 @@ class OctoslackPlugin(
                     "CaptureCommandReturnCode": False,
                     "CaptureCommandOutput": False,
                     "Command": "",
+                    "MinNotificationInterval": 0,
                 },
                 "MetadataAnalysisFinished": {
                     "Enabled": False,
@@ -562,6 +581,7 @@ class OctoslackPlugin(
                     "CaptureCommandReturnCode": False,
                     "CaptureCommandOutput": False,
                     "Command": "",
+                    "MinNotificationInterval": 0,
                 },
                 "MovieRendering": {
                     "Enabled": False,
@@ -582,6 +602,7 @@ class OctoslackPlugin(
                     "CaptureCommandReturnCode": False,
                     "CaptureCommandOutput": False,
                     "Command": "",
+                    "MinNotificationInterval": 0,
                 },
                 "MovieDone": {
                     "Enabled": False,
@@ -604,6 +625,7 @@ class OctoslackPlugin(
                     "CaptureCommandReturnCode": False,
                     "CaptureCommandOutput": False,
                     "Command": "",
+                    "MinNotificationInterval": 0,
                 },
                 "MovieFailed": {
                     "Enabled": False,
@@ -624,6 +646,7 @@ class OctoslackPlugin(
                     "CaptureCommandReturnCode": False,
                     "CaptureCommandOutput": False,
                     "Command": "",
+                    "MinNotificationInterval": 0,
                 },
             },
             "gcode_events": "",
@@ -949,6 +972,8 @@ class OctoslackPlugin(
     def on_event(self, event, payload):
         self.handle_event(event, None, payload, False, False, None)
 
+    event_last_processed = {}  ##event --> timestamp map
+
     def handle_event(
         self,
         event,
@@ -1048,6 +1073,31 @@ class OctoslackPlugin(
                 + ", Payload: "
                 + str(payload)
             )
+
+            last_processed_key = event
+            if event == "GcodeEvent":
+                last_processed_key = event + "_" + event_settings["InternalName"]
+
+            if (
+                "MinNotificationInterval" in event_settings
+                and last_processed_key in self.event_last_processed
+                and not override_notification_enabled_check
+            ):
+                min_notification_interval = int(
+                    event_settings["MinNotificationInterval"]
+                )
+                if min_notification_interval > 0:
+                    prev_timestamp = self.event_last_processed[last_processed_key]
+                    now = time.time()
+                    if now < (prev_timestamp + (min_notification_interval * 60)):
+                        self._logger.debug(
+                            "Ignoring "
+                            + event
+                            + " event to satisfy min notification interval"
+                        )
+                        return
+
+            self.event_last_processed[last_processed_key] = time.time()
 
             self.process_slack_event(
                 event,
@@ -4531,12 +4581,7 @@ class OctoslackPlugin(
                     )
 
                     self.handle_event(
-                        "GcodeEvent",
-                        None,
-                        {"cmd": cmd},
-                        notification_enabled,
-                        command_enabled,
-                        gcode_event,
+                        "GcodeEvent", None, {"cmd": cmd}, False, False, gcode_event
                     )
         except Exception as e:
             self._logger.exception(

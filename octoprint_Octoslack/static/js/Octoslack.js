@@ -567,6 +567,7 @@ var Octoslack = {
             var customCaptureCommandReturnCode = false;
             var customCaptureCommandOutput = false;
             var customCommand = "";
+            var customMinNotificationInterval = "0";
 
             var rowContainerId = eventType + "_" + internalName + "_row";
 	
@@ -615,6 +616,9 @@ var Octoslack = {
 
                 if(event.Command !== undefined)
                     customCommand = event.Command;
+
+                if(event.MinNotificationInterval !== undefined && event.MinNotificationInterval !== "")
+                    customMinNotificationInterval = event.MinNotificationInterval;
 
                 if(gcode == undefined)
                     gcode = "";
@@ -775,6 +779,23 @@ var Octoslack = {
 	        customSettingsHtml.push("                0 = disabled");
 	        customSettingsHtml.push("                <br/>");
 	        customSettingsHtml.push("                A value of 5 would indicate a heartbeat message should be sent every 5 minutes ");
+	        customSettingsHtml.push("            </small>");
+	        customSettingsHtml.push("        </div>");
+            }
+
+            if(eventType == "GCODE" || internalName == "Progress") {
+                //MinNotificationInterval
+	        customSettingsHtml.push("        <div class='octoprint_config_row'>");
+	        customSettingsHtml.push("            <input type='number' step='any' min='0' class='input-mini text-right' id='octoslack_event_" + internalName + "_MinNotificationInterval' "
+                    + (useDataBind ? "data-bind='value: settings.plugins.Octoslack.supported_events." + internalName + ".MinNotificationInterval'" : "")
+                    + " value='" + this.escapeHtml(customMinNotificationInterval) + "'>");
+	        customSettingsHtml.push("            <div class='octoslack_label octoslack_action_label'>Minimum notification interval (minutes)</div>");
+	        customSettingsHtml.push("            <br/>")
+	        customSettingsHtml.push("            <br/>")
+	        customSettingsHtml.push("            <small class='muted'>");
+	        customSettingsHtml.push("                0 = disabled");
+	        customSettingsHtml.push("                <br/>");
+	        customSettingsHtml.push("                A value of 5 would limit a event's notification to once every 5 minutes ");
 	        customSettingsHtml.push("            </small>");
 	        customSettingsHtml.push("        </div>");
             }
@@ -1149,6 +1170,7 @@ var Octoslack = {
                   "CaptureCommandReturnCode" : false, 
                   "CommandCommandOutput" : false, 
                   "Command" : "",
+                  "MinNotificationInterval" : "0",
                 },
 	];
 
@@ -1217,6 +1239,7 @@ var Octoslack = {
             var captureCommandReturnCode = $("#octoslack_event_" + internalName + "_capturecommandreturncode").is(':checked');
             var captureCommandOutput = $("#octoslack_event_" + internalName + "_capturecommandoutput").is(':checked');
             var command = $("#octoslack_event_" + internalName + "_command").val();
+            var minNotificationInterval = $("#octoslack_event_" + internalName + "_MinNotificationInterval").val();
 	
             gcode_events.push({ "InternalName" : internalName, 
                                   "Gcode" : gcode, 
@@ -1234,6 +1257,7 @@ var Octoslack = {
                                   "CaptureCommandReturnCode" : captureCommandReturnCode,
                                   "CaptureCommandOutput" : captureCommandOutput,
                                   "Command" : command,
+                                  "MinNotificationInterval" : minNotificationInterval,
                                 });
         });
 
