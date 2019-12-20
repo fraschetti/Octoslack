@@ -119,6 +119,11 @@
             <span class="octoslack_valign octoslack_action_label" onclick="$('#octoslack_connection_type_matrix').trigger('click')">Matrix</span>
         </div>
 	<small class="muted">Any <a href="https://matrix.org/" target="_blank">Matrix</a> compatible service (e.g. <a href="https://riot.im/" target="_blank">Riot</a>)</small>
+        <div>
+            <input type="radio" name="octoslack_connection_type" id="octoslack_connection_type_discord" onclick="Octoslack.changeConnectionType(this.value);" class="octoslack_valign octoslack_checkbox_margin_override" value="DISCORD">
+            <span class="octoslack_valign octoslack_action_label" onclick="$('#octoslack_connection_type_discord').trigger('click')">Discord</span>
+        </div>
+	<small class="muted"><a href="https://discordapp.com/" target="_blank">Discord</a></small>
     </div>
     <br/>
     <div id="octoslack_slack_config_section" class="octoslack_hidden"> <!-- Start Slack config section -->
@@ -429,6 +434,30 @@
             </div>
         </div>
     </div> <!-- End Matrix config section -->
+    <div id="octoslack_discord_config_section" class="octoslack_hidden"> <!-- Start Discord config section -->
+        <h2>Discord configuration</h2>
+        <div class="octoslack_config_group">
+            <br/>
+            <div class="octoprint_config_row">
+                <span class="octoslack_label">WebHook URL(s)</span>
+                <input type="text" class="octoslack_width_auto" size="60" data-bind="value: settings.plugins.Octoslack.discord_config.webhook_urls">
+                </br>
+		<small class="muted">Discord requires a unique WebHook per channel. One or more WebHooks can be provided as a comma-separated list (WebHook1,WebHook2,WebHook3). A reference for creating Discord WebHooks can be found in the 'Making a WebHook' section <a href="https://support.discordapp.com/hc/en-us/articles/228383668-Intro-to-Webhooks" target="_blank">here</a></small>
+            </div>
+            <div class="octoprint_config_row">
+                <span class="octoslack_label">Alternate username</span>
+                <input type="text" class="octoslack_width_auto" size="15" data-bind="value: settings.plugins.Octoslack.discord_config.alternate_username">
+	        </br>
+	        <small class="muted">Optional WebHook username override to display an alternate username for messages posted to the Discord channel</small>
+            </div>
+            <div class="octoprint_config_row">
+                <span class="octoslack_label">Avatar URL</span>
+                <input type="text" class="octoslack_width_auto" size="60" data-bind="value: settings.plugins.Octoslack.discord_config.avatar_url">
+	        </br>
+	        <small class="muted">Optional WebHook avatar URL override</small>
+            </div>
+        </div>
+    </div> <!-- End Discord config section -->
     <br/>
     <h2>Snapshots</h2>
     <div class="octoslack_config_group">
@@ -508,6 +537,16 @@
            <br/>
            <small class="muted">Snapshot images will hosted by the <a href="https://matrix.org/" target="_blank">Matrix</a> server. Only Matrix hosted snapshots will render in the message. All other hosting options will simply be included as a URL in the message body</small>
         </div>
+        <div id="octoslackDiscordUploadMethod">
+            <input type="radio" name="octoslackSnapshotUploadMethod"
+            id="octoslackSnapshotUploadMethod_discord"
+            onclick="Octoslack.changeSnapshotUploadMethod(this);"
+            class="octoslack_valign octoslack_checkbox_margin_override" value="DISCORD">
+            <span class="octoslack_valign octoslack_action_label"
+              onclick="$('#octoslackSnapshotUploadMethod_discord').trigger('click')">Discord</span>
+           <br/>
+           <small class="muted">Snapshot images will hosted by <a href="https://discordapp.com/" target="_blank">Discord</a></small>
+        </div>
         <div id="octoslack_imgur_group" class="octoslack_hidden">
             <br/>
             <div class="octoprint_config_row">
@@ -529,7 +568,7 @@
                 <input type="text" id="octoslack_imgur_refresh_token" class="octoslack_width_auto" size="60" data-bind="value: settings.plugins.Octoslack.imgur_config.refresh_token">
             </div>
 	    <small class="muted">
-                Once you've provided the Imgur Client ID above, click <a href="#" id="octoslack_imgur_auth_link">here</a> to approve this application and generate the needed refresh_token
+                Once you've provided the Imgur Client ID above, click <a href="#" id="octoslack_imgur_auth_link" target="_blank">here</a> to approve this application and generate the needed refresh_token
                 The refresh token is made available once this application has been authorized. Because this integration isn't via a publically accessible web site/service, we'll need to manually copy/paste the refresh_token provided by the authorization page to this configuration screen.
                 <br/>
                 <br/>

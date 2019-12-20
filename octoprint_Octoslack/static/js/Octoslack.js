@@ -213,6 +213,12 @@ var Octoslack = {
 	return connection_method == "PUSHOVER";
     },
 
+    allow_channel_override_attr : function() {
+	var connection_method = $("#octoslack_connection_method_hidden").val();
+	return connection_method !== "DISCORD";
+    },
+
+
     changeConnectionType : function(new_type) {
         if (new_type === undefined)
             new_type = $("#octoslack_connection_method_hidden").val();
@@ -222,12 +228,14 @@ var Octoslack = {
         var pushover_config_section = $("#octoslack_pushover_config_section");
         var rocketchat_config_section = $("#octoslack_rocketchat_config_section");
         var matrix_config_section = $("#octoslack_matrix_config_section");
+        var discord_config_section = $("#octoslack_discord_config_section");
 
         slack_config_section.attr("class", "octoslack_hidden");
         pushbullet_config_section.attr("class", "octoslack_hidden"); 
         pushover_config_section.attr("class", "octoslack_hidden"); 
         rocketchat_config_section.attr("class", "octoslack_hidden"); 
         matrix_config_section.attr("class", "octoslack_hidden"); 
+        discord_config_section.attr("class", "octoslack_hidden"); 
 
         var apiTokenGroup = $("#octoslack_apitoken_group");
         var webhookGroup = $("#octolack_webhook_group");
@@ -237,6 +245,7 @@ var Octoslack = {
 	var pushoverUploadOption = $("#octoslackPushoverUploadMethod");
 	var rocketChatUploadOption = $("#octoslackRocketChatUploadMethod");
 	var matrixUploadOption = $("#octoslackMatrixUploadMethod");
+	var discordUploadOption = $("#octoslackDiscordUploadMethod");
 
         apiTokenGroup.attr("class", "octoslack_hidden");
         webhookGroup.attr("class", "octoslack_hidden");
@@ -246,6 +255,7 @@ var Octoslack = {
         pushoverUploadOption.attr("class", "octoslack_hidden"); 
         rocketChatUploadOption.attr("class", "octoslack_hidden"); 
         matrixUploadOption.attr("class", "octoslack_hidden"); 
+        discordUploadOption.attr("class", "octoslack_hidden"); 
 
         switch (new_type) {
             case "APITOKEN":
@@ -273,6 +283,10 @@ var Octoslack = {
                 matrix_config_section.attr("class", "octoslack_visible");
                 matrixUploadOption.attr("class", "octoslack_visible");
                 break;
+           case "DISCORD":
+                discord_config_section.attr("class", "octoslack_visible");
+                discordUploadOption.attr("class", "octoslack_visible");
+                break;
         }
 
         var connection_method_hidden = $("#octoslack_connection_method_hidden");
@@ -288,6 +302,10 @@ var Octoslack = {
 	var allow_pushover_attrs = Octoslack.allow_pushover_msg_attrs();
 	$( "div[octoslack_msg_pushover]" ).each(function() {
 	    $(this).attr("class", allow_pushover_attrs ? "octoprint_config_row octoslack_visible" : "octoprint_config_row octoslack_hidden");
+	});
+	var allow_channel_override_attr = Octoslack.allow_channel_override_attr();
+	$( "div[octoslack_msg_channel_override]" ).each(function() {
+	    $(this).attr("class", allow_channel_override_attr ? "octoprint_config_row octoslack_visible" : "octoprint_config_row octoslack_hidden");
 	});
     },
 
@@ -832,7 +850,7 @@ var Octoslack = {
             }
 
             //ChannelOverride
-	    eventHtml.push("        <div class='octoprint_config_row'>");
+	    eventHtml.push("        <div class='octoprint_config_row' octoslack_msg_channel_override>");
 	    eventHtml.push("            <input type='text' size='30' id='octoslack_event_" + internalName + "_ChannelOverride' "
                 + (useDataBind ? "data-bind='value: settings.plugins.Octoslack.supported_events." + internalName + ".ChannelOverride'" : "")
                 + (customChannelOverride.trim().length > 0 ? "value='" + this.escapeHtml(customChannelOverride.trim()) + "'" : "")

@@ -49,6 +49,7 @@ plugin_requires = [
     "pushover_complete",
     "rocket-python",
     "matrix_client",
+    "discord-webhook",
 ]
 
 ### --------------------------------------------------------------------------------------------------------------------

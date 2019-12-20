@@ -18,6 +18,7 @@ from octoprint.util import RepeatedTimer
 from websocket import WebSocketConnectionClosedException
 from minio import Minio
 from sarge import run, Capture, shell_quote
+from discord_webhook import DiscordWebhook, DiscordEmbed
 import octoprint.util
 import octoprint.plugin
 import urllib2
@@ -65,6 +66,7 @@ class OctoslackPlugin(
     ##TODO ENHANCEMENT - Consider extending the progress snapshot minimum interval beyond Slack to other providers
     ##TODO ENHANCEMENT - Add Persoanl Token, emoji, avatar, and other formatting enhancements to Rocket.API once a library supports them (or update the libs yourself)
     ##TODO We've certainly moved past "it's time to refactor" line. Both the UI/JS/Python code need to be refactored
+    ##TODO add multi-cam support: https://plugins.octoprint.org/plugins/multicam/
 
     ##~~ SettingsPlugin mixin
 
@@ -109,6 +111,11 @@ class OctoslackPlugin(
                 "access_token": "",
                 "user_id": "",
                 "channel": "",
+            },
+            "discord_config": {
+                "webhook_urls": "",
+                "alternate_username": "",
+                "avatar_url": "",
             },
             "ignore_cancel_fail_event": True,
             "mattermost_compatability_mode": False,
@@ -2272,6 +2279,8 @@ class OctoslackPlugin(
             return "*", "*", " ", "\n"
         elif connection_method == "MATRIX":
             return "<b>", "</b>", " ", "<br/>\n"
+        elif connection_method == "DISCORD":
+            return "**", "**", " ", "\n"
 
         return "", "", ": ", "\n"
 
@@ -2483,7 +2492,7 @@ class OctoslackPlugin(
             rocketChatServerURL = None
             rocketChatUsername = None
             rocketChatPassword = None
-            marixServerURL = None
+            matrixServerURL = None
             matrixAccessToken = None
             matrixUserID = None
 
@@ -2685,6 +2694,7 @@ class OctoslackPlugin(
                                 connection_method == "MATRIX"
                                 and snapshot_upload_method == "MATRIX"
                             )
+                            or connection_method == "DISCORD"
                         ):
                             snapshot_url_to_append = None
 
@@ -2858,6 +2868,10 @@ class OctoslackPlugin(
                     channels = self._settings.get(["matrix_config"], merged=True).get(
                         "channel"
                     )
+                elif connection_method == "DISCORD":
+                    channels = self._settings.get(["discord_config"], merged=True).get(
+                        "webhook_urls"
+                    )
 
             if not channels:
                 channels = ""
@@ -2969,6 +2983,7 @@ class OctoslackPlugin(
                             if (
                                 self._bot_progress_last_req
                                 and progress_update_method == "INPLACE"
+                                and connection_method == "APITOKEN"
                             ):
                                 apiRsp = slackAPIConnection.chat.update(
                                     self._bot_progress_last_req.body["channel"],
@@ -3032,6 +3047,7 @@ class OctoslackPlugin(
                                 )
                                 if (
                                     progress_update_method == "INPLACE"
+                                    and connection_method == "APITOKEN"
                                     and self._bot_progress_last_snapshot_queue.qsize()
                                     > 0
                                 ):
@@ -3439,6 +3455,111 @@ class OctoslackPlugin(
                         )
                     except Exception as e:
                         self._logger.exception("Matrix send error: " + str(e))
+                elif not channel == None and len(channel) > 0:
+                    try:
+                        discordWebHookUrl = channel
+                        self._logger.debug(
+                            "Discord msg channel WebHook: " + str(discordWebHookUrl)
+                        )
+
+                        discord_color = None
+                        if color == "good":
+                            discord_color = 242424
+                        elif color == "warning":
+                            discord_color = 16758825
+                        elif color == "danger":
+                            discord_color = 16212835
+
+                        alternate_username = self._settings.get(
+                            ["discord_config"], merged=True
+                        ).get("alternate_username")
+                        if (
+                            not alternate_username
+                            or len(alternate_username.strip()) == 0
+                        ):
+                            alternate_username = None
+
+                        avatar_url = self._settings.get(
+                            ["discord_config"], merged=True
+                        ).get("avatar_url")
+                        if not avatar_url or len(avatar_url.strip()) == 0:
+                            avatar_url = None
+
+                        self._logger.debug(
+                            "Discord msg alternate username: " + str(alternate_username)
+                        )
+                        self._logger.debug("Discord msg avatar url: " + str(avatar_url))
+                        self._logger.debug("Discord msg color: " + str(discord_color))
+
+                        content = "**" + pretext + "**"
+
+                        discord = DiscordWebhook(
+                            url=discordWebHookUrl,
+                            username=alternate_username,
+                            avatar_url=avatar_url,
+                            content=content,
+                        )
+
+                        embed = DiscordEmbed(
+                            title=None, description="\n" + text, color=discord_color
+                        )
+
+                        if hosted_url and len(hosted_url) > 0:
+                            if snapshot_upload_method == "DISCORD":
+                                self._logger.debug(
+                                    "Discord snapshot image to attach: "
+                                    + str(hosted_url)
+                                )
+                                snapshot_filename = hosted_url[
+                                    hosted_url.rfind("/") + 1 :
+                                ]
+                                with open(hosted_url, "rb") as f:
+                                    discord.add_file(
+                                        file=f.read(), filename=snapshot_filename
+                                    )
+                            else:
+                                embed.set_image(url=hosted_url)
+
+                        if (
+                            event == "MovieDone"
+                            and "movie" in event_payload
+                            and snapshot_upload_method == "DISCORD"
+                        ):
+                            timelapse_movie = event_payload["movie"]
+                            self._logger.debug(
+                                "Discord timelapse movie to attach: "
+                                + str(timelapse_movie)
+                            )
+                            movie_filename = timelapse_movie[
+                                timelapse_movie.rfind("/") + 1 :
+                            ]
+                            with open(timelapse_movie, "rb") as f:
+                                discord.add_file(file=f.read(), filename=movie_filename)
+
+                        if not footer == None and len(footer) > 0:
+                            embed.set_footer(text=footer)
+
+                        discord.add_embed(embed)
+
+                        self._logger.debug(
+                            "Discord WebHook message json: " + json.dumps(discord.json)
+                        )
+
+                        discordRsp = discord.execute()
+
+                        self._logger.debug(
+                            "Discord WebHook execute response: "
+                            + "\n    Status Code: "
+                            + str(discordRsp.status_code)
+                            + "\n    Headers: \n"
+                            + str(discordRsp.headers)
+                            + "\n    Content: \n"
+                            + str(discordRsp.content)
+                        )
+                    except Exception as e:
+                        self._logger.exception(
+                            "Discord WebHook message send error: " + str(e)
+                        )
 
         except Exception as e:
             self._logger.exception("Send message error: " + str(e))
@@ -3480,6 +3601,7 @@ class OctoslackPlugin(
                 connection_method == "ROCKETCHAT"
                 and snapshot_upload_method == "ROCKETCHAT"
             )
+            or (connection_method == "DISCORD" and snapshot_upload_method == "DISCORD")
         ):
             return local_file_path, error_msgs, None
 
@@ -3497,6 +3619,7 @@ class OctoslackPlugin(
                 snapshot_upload_method == "PUSHOVER"
                 or snapshot_upload_method == "ROCKETCHAT"
                 or snapshot_upload_method == "MATRIX"
+                or snapshot_upload_method == "DISCORD"
             ):
                 return None, None
 
