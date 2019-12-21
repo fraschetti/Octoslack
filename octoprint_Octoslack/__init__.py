@@ -75,7 +75,6 @@ class OctoslackPlugin(
             "connection_method": "APITOKEN",
             "slack_apitoken_config": {
                 "api_token": "",
-                "alternate_bot_name": "",
                 "enable_commands": True,
                 "commands_positive_reaction": ":thumbsup:",
                 "commands_negative_reaction": ":thumbsdown:",
@@ -1932,9 +1931,14 @@ class OctoslackPlugin(
         ):
             return
 
-        alternate_bot_name = self._settings.get(
-            ["slack_apitoken_config"], merged=True
-        ).get("alternate_bot_name")
+        slack_identity_config = self._settings.get(["slack_identity"], merged=True)
+        slack_as_user = slack_identity_config["existing_user"]
+        alternate_bot_name = None
+
+        if not slack_as_user:
+            if "username" in slack_identity_config:
+                alternate_bot_name = slack_identity_config["username"]
+
         alternate_bot_id = None
         if not alternate_bot_name == None and len(alternate_bot_name.strip()) > 0:
             alternate_bot_id = "@" + alternate_bot_name.strip()
@@ -2947,22 +2951,43 @@ class OctoslackPlugin(
 
             slack_identity_config = self._settings.get(["slack_identity"], merged=True)
             slack_as_user = slack_identity_config["existing_user"]
-            slack_icon_url = ""
-            slack_icon_emoji = ""
-            slack_username = ""
+            slack_icon_url = None
+            slack_icon_emoji = None
+            slack_username = None
 
             if not slack_as_user:
-                if "icon_url" in slack_identity_config:
-                    slack_icon_url = slack_identity_config["icon_url"]
-                if not self.mattermost_mode() and "icon_emoji" in slack_identity_config:
-                    slack_icon_emoji = slack_identity_config["icon_emoji"]
-                if "username" in slack_identity_config:
-                    slack_username = slack_identity_config["username"]
+                if (
+                    "icon_url" in slack_identity_config
+                    and len(slack_identity_config["icon_url"].strip()) > 0
+                ):
+                    slack_icon_url = slack_identity_config["icon_url"].strip()
+                if (
+                    not self.mattermost_mode()
+                    and "icon_emoji" in slack_identity_config
+                    and len(slack_identity_config["icon_emoji"].strip()) > 0
+                ):
+                    slack_icon_emoji = slack_identity_config["icon_emoji"].strip()
+                if (
+                    "username" in slack_identity_config
+                    and len(slack_identity_config["username"].strip()) > 0
+                ):
+                    slack_username = slack_identity_config["username"].strip()
 
             allow_empty_channel = connection_method == "WEBHOOK"
 
             if len(channels) == 0:
                 self._logger.debug("No channels configured")
+
+            self._logger.debug(
+                "postMessage - username="
+                + str(slack_username)
+                + ", as_user="
+                + str(slack_as_user)
+                + ", icon_url="
+                + str(slack_icon_url)
+                + ", icon_emoji="
+                + str(slack_icon_emoji)
+            )
 
             for channel in channels.split(","):
                 channel = channel.strip()
@@ -3086,12 +3111,15 @@ class OctoslackPlugin(
 
                     if not slack_as_user == None:
                         slack_msg["as_user"] = slack_as_user
-                    if not slack_icon_url == None and len(slack_icon_url) > 0:
-                        slack_msg["icon_url"] = slack_icon_url
-                    if not slack_icon_emoji == None and len(slack_icon_emoji) > 0:
-                        slack_msg["icon_emoji"] = slack_icon_emoji
-                    if not slack_username == None and len(slack_username) > 0:
-                        slack_msg["username"] = slack_username
+                    if not slack_icon_url == None and len(slack_icon_url.strip()) > 0:
+                        slack_msg["icon_url"] = slack_icon_url.strip()
+                    if (
+                        not slack_icon_emoji == None
+                        and len(slack_icon_emoji.strip()) > 0
+                    ):
+                        slack_msg["icon_emoji"] = slack_icon_emoji.strip()
+                    if not slack_username == None and len(slack_username.strip()) > 0:
+                        slack_msg["username"] = slack_username.strip()
 
                     slack_msg["attachments"] = attachments
                     self._logger.debug(
@@ -3455,7 +3483,11 @@ class OctoslackPlugin(
                         )
                     except Exception as e:
                         self._logger.exception("Matrix send error: " + str(e))
-                elif not channel == None and len(channel) > 0:
+                elif (
+                    connection_method == "DISCORD"
+                    and (not channel == None)
+                    and len(channel) > 0
+                ):
                     try:
                         discordWebHookUrl = channel
                         self._logger.debug(

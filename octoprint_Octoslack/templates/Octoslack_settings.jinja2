@@ -144,19 +144,6 @@
                     </small>
                 </div>
                 <br/>
-                <div class="octoprint_config_row">
-                    <span class="octoslack_label">Alternate bot name</span>
-                    <input type="text" class="octoslack_width_auto" size="15" data-bind="value: settings.plugins.Octoslack.slack_apitoken_config.alternate_bot_name">
-		    </br>
-		    <small class="muted">
-                        An additional bot name Octoslack will respond to in your Slack channel(s).
-                        <br/>
-                        Primarily useful when running multiple OctoPrint/Octoslack instances. The original bot name can be used to control a single instance while a common alternate bot name can be used to control all instances
-                        <br/>
-                        Slack will not highlight this alternate name but Octoslack will still respond accordingly
-                    </small>
-                </div>
-                <br/>
 	        <div class="octoprint_config_row">
                     <input type="checkbox" class="octoslack_valign octoslack_checkbox_margin_override" id="octoslack_bot_commands" data-bind="checked: settings.plugins.Octoslack.slack_apitoken_config.enable_commands">
                     <div class="octoslack_label octoslack_action_label" onclick="$('#octoslack_bot_commands').trigger('click')">Listen for commands</div>
@@ -289,7 +276,13 @@
                 <input type="checkbox" id="octoslack_slack_identity_check" onClick="Octoslack.toggleUseSlackIdentity(this);" class="octoslack_valign octoslack_checkbox_margin_override" data-bind="checked: settings.plugins.Octoslack.slack_identity.existing_user">
                 <div class="octoslack_label octoslack_action_label" onclick="$('#octoslack_slack_identity_check').trigger('click')">Use Slack identity</div>
 	        <br/>
-    	        <small class="muted">When checked, Octoslack will Use the name/icon defined for the Bot/WebHook. When unchecked, a custom name and icon can be specified</small>
+    	        <small class="muted">
+                    When checked, Octoslack will Use the name/icon defined for the Bot/WebHook. When unchecked, a custom name and icon can be specified.
+                    <br/>
+                    When using the Slack API token, specifying an alternate username here will alow enable listening for and responding to commands issued using this alternate username. In the scenario when multiple Octoslack instances are configured to use the same Slack API Token, the original bot name can be used to control a single instance while a common alternate name can be used to control all instances.
+                    <br/>
+                    Slack will not highlight this alternate name but Octoslack will still respond accordingly
+                </small>
             </div>
             <div id="octoslack_custom_identity_group" class="octoslack_hidden">
                 <br/>

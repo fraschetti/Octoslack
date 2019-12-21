@@ -84,9 +84,10 @@ var Octoslack = {
     },
 
     applyMattermostChanges : function() {
+	var connection_method = $("#octoslack_connection_method_hidden").val();
         var mattermost_enabled = $("#octoslack_mattermost_compatabilty_mode").is(":checked");
 
-	if(mattermost_enabled) {
+	if(connection_method === "WEBHOOK" && mattermost_enabled) {
 		$('#octoslack_custom_identity_icon_emoji').attr('disabled', 'disabled');
 	} else {
 		$('#octoslack_custom_identity_icon_emoji').removeAttr('disabled');
@@ -307,6 +308,8 @@ var Octoslack = {
 	$( "div[octoslack_msg_channel_override]" ).each(function() {
 	    $(this).attr("class", allow_channel_override_attr ? "octoprint_config_row octoslack_visible" : "octoprint_config_row octoslack_hidden");
 	});
+
+	this.applyMattermostChanges();
     },
 
     toggleUseSlackIdentity : function(checkbox) {
