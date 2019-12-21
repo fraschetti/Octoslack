@@ -42,6 +42,7 @@ import re
 import copy
 import netifaces
 import pytz
+import socket
 
 SLACKER_TIMEOUT = 60
 COMMAND_EXECUTION_WAIT = 10
@@ -1200,6 +1201,8 @@ class OctoslackPlugin(
             "{error}": "N/A",
             "{cmd}": "N/A",
             "{ip_address}": "N/A",
+            "{hostname}": "N/A",
+            "{fqdn}": "N/A",
             "{printer_status}": "N/A",
         }
 
@@ -1538,6 +1541,8 @@ class OctoslackPlugin(
         ips = self.get_ips()
         ips_str = ", ".join(ips)
         replacement_params["{ip_address}"] = ips_str
+        replacement_params["{hostname}"] = self.get_hostname()
+        replacement_params["{fqdn}"] = self.get_fqdn()
 
         if includeSupportedCommands:
             enabled_commands = self._settings.get(
@@ -1727,6 +1732,22 @@ class OctoslackPlugin(
             ips.append("'IP detection error'")
 
         return ips
+
+    def get_hostname(self):
+        try:
+            return socket.gethostname()
+        except Exception as e:
+            self._logger.exception("Failed to query hostname: " + str(e))
+
+        return "Hostname detection error"
+
+    def get_fqdn(self):
+        try:
+            return socket.getfqdn()
+        except Exception as e:
+            self._logger.exception("Failed to query fqdn: " + str(e))
+
+        return "Fqdn detection error"
 
     def start_rtm_client(self):
         self.stop_rtm_client()
