@@ -1,8 +1,8 @@
 # Octoslack #
-An OctoPrint plugin for monitoring your printer and prints via Slack, Mattermost, Pushbullet, Pushover, Rocket.Chat, or Riot/Matrix
+An OctoPrint plugin for monitoring your printer and prints via Slack, Mattermost, Pushbullet, Pushover, Rocket.Chat, Discord, or Riot/Matrix
 
 # Features #
- - Support for Slack, Mattermost, Pushbullet, Pushover, Rocket.Chat, & Matrix based platforms (e.g. Riot)
+ - Support for Slack, Mattermost, Pushbullet, Pushover, Rocket.Chat, Discord, & Matrix based platforms (e.g. Riot)
  - Monitor both print status as well as printer connectivity status
  - Respond to Slack commands to check print status or cancel/pause/resume a print
      - Each command can be individually enabled/disbaled or flagged as restricted which limits the command(s) to specific users
@@ -16,10 +16,10 @@ An OctoPrint plugin for monitoring your printer and prints via Slack, Mattermost
  - Slack bot name/icon/emoji customizations
      - Requires use of the Slack API Token
  - Optional inclusion of printer snapshot images with each message
-     - Support for snapshot hosting via Amazon S3, Minio, Imgur (with album support), Slack attachments, Pushover, Pushbullet, Rocket.Chat, or Matrix
+     - Support for snapshot hosting via Amazon S3, Minio, Imgur (with album support), Slack attachments, Pushover, Pushbullet, Rocket.Chat, Discord, or Matrix
      - Slack attachments requires use of the Slack API Token
  - Optional upload of rendered timelapse video to configured hosting service
-     - Currently excludes Imgur, Pushover, Rocket.Chat, & Matrix
+     - Currently excludes Imgur, Pushover, Rocket.Chat, Discord, & Matrix
  - Support for additional snapshot images from IP cameras
  
  # Supported Events #
