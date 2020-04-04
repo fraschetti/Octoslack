@@ -1879,14 +1879,14 @@ class OctoslackPlugin(
                                 repeat_error_count = 0
                             except Exception as e:
                                 self._logger.error(
-                                    "Slack RTM message processing error: " + str(e)
+                                    "Slack RTM message processing error: " + str(e),exc_info=e
                                 )
                     else:
                         time.sleep(0.5)
                 except WebSocketConnectionClosedException as ce:
                     self._logger.error(
                         "Slack RTM API read error (WebSocketConnectionClosedException): "
-                        + str(ce.message)
+                        + str(ce.message), exc_info=ce
                     )
                     time.sleep(1)
                     sc = None
@@ -1976,9 +1976,13 @@ class OctoslackPlugin(
 
         matched_id = None
 
-        if bot_id in message_text:
+        self._logger.debug("matching BI " + str(bot_id) + " and MT " + str(message_text) + " and ABI " + str(alternate_bot_id))
+        if not message_text:
+            # no need to test a blank message
+            return
+        elif bot_id in message_text:
             matched_id = bot_id
-        elif alternate_bot_id in message_text:
+        elif alternate_bot_id and alternate_bot_id in message_text:
             matched_id = alternate_bot_id
         else:
             return
