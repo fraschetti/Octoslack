@@ -124,6 +124,11 @@
             <span class="octoslack_valign octoslack_action_label" onclick="$('#octoslack_connection_type_discord').trigger('click')">Discord</span>
         </div>
 	<small class="muted"><a href="https://discordapp.com/" target="_blank">Discord</a></small>
+        <div>
+            <input type="radio" name="octoslack_connection_type" id="octoslack_connection_type_teams" onclick="Octoslack.changeConnectionType(this.value);" class="octoslack_valign octoslack_checkbox_margin_override" value="TEAMS">
+            <span class="octoslack_valign octoslack_action_label" onclick="$('#octoslack_connection_type_teams').trigger('click')">Microsoft Teams</span>
+        </div>
+	<small class="muted"><a href="https://teams.microsoft.com/" target="_blank">Microsoft Teams</a></small>
     </div>
     <br/>
     <div id="octoslack_slack_config_section" class="octoslack_hidden"> <!-- Start Slack config section -->
@@ -451,6 +456,18 @@
             </div>
         </div>
     </div> <!-- End Discord config section -->
+    <div id="octoslack_teams_config_section" class="octoslack_hidden"> <!-- Start Teams config section -->
+        <h2>Microsoft Teams configuration</h2>
+        <div class="octoslack_config_group">
+            <br/>
+            <div class="octoprint_config_row">
+                <span class="octoslack_label">WebHook URL(s)</span>
+                <input type="text" class="octoslack_width_auto" size="60" data-bind="value: settings.plugins.Octoslack.teams_config.webhook_urls">
+                </br>
+		<small class="muted">Microsoft Teams requires a unique WebHook per channel. One or more WebHooks can be provided as a comma-separated list (WebHook1,WebHook2,WebHook3). A reference for creating Microsoft Teams WebHooks can be found <a href="https://docs.microsoft.com/en-us/microsoftteams/platform/webhooks-and-connectors/how-to/add-incoming-webhook" target="_blank">here</a></small>
+            </div>
+        </div>
+    </div> <!-- End Teams config section -->
     <br/>
     <h2>Snapshots</h2>
     <div class="octoslack_config_group">

@@ -41,6 +41,7 @@ import copy
 import netifaces
 import pytz
 import socket
+import pymsteams
 from six import unichr
 from six.moves import zip
 
@@ -125,6 +126,7 @@ class OctoslackPlugin(
                 "alternate_username": "",
                 "avatar_url": "",
             },
+            "teams_config": {"webhook_urls": ""},
             "ignore_cancel_fail_event": True,
             "mattermost_compatability_mode": False,
             "include_raspi_temp": True,
@@ -2467,24 +2469,51 @@ class OctoslackPlugin(
         if filename == None or len(filename.strip()) == 0:
             return
 
-
         for attempt_no in range(1, max_attempts + 1):
             try:
                 delay = (attempt_no - 1) * 0.5
                 if delay > 0:
-                    self._logger.debug("Sleeping " + str(delay) + "ms before next deletion attempt of local file (attempt #" + str(attempt_no) + "): " + filename)
+                    self._logger.debug(
+                        "Sleeping "
+                        + str(delay)
+                        + "ms before next deletion attempt of local file (attempt #"
+                        + str(attempt_no)
+                        + "): "
+                        + filename
+                    )
                     time.sleep(delay)
 
-                self._logger.debug("Deleting local file (attempt #" + str(attempt_no) + "): " + filename)
+                self._logger.debug(
+                    "Deleting local file (attempt #"
+                    + str(attempt_no)
+                    + "): "
+                    + filename
+                )
                 os.remove(filename)
 
                 if not os.path.exists(filename):
-                    self._logger.debug("Deletion of local file confirmed (attempt #" + str(attempt_no) + "): " + filename)
+                    self._logger.debug(
+                        "Deletion of local file confirmed (attempt #"
+                        + str(attempt_no)
+                        + "): "
+                        + filename
+                    )
                     return
             except Exception as e:
-                self._logger.error("Error attempting deletion of local file (attempt #" + str(attempt_no) + "): " + filename, e)
+                self._logger.error(
+                    "Error attempting deletion of local file (attempt #"
+                    + str(attempt_no)
+                    + "): "
+                    + filename,
+                    e,
+                )
 
-        self._logger.debug("Deletion of local file failed after " + str(max_attempts) + " attempts: " + filename)
+        self._logger.debug(
+            "Deletion of local file failed after "
+            + str(max_attempts)
+            + " attempts: "
+            + filename
+        )
 
     def connection_method(self):
         return self._settings.get(["connection_method"], merged=True)
@@ -2507,6 +2536,8 @@ class OctoslackPlugin(
             return "<b>", "</b>", " ", "<br/>\n"
         elif connection_method == "DISCORD":
             return "**", "**", " ", "\n"
+        elif connection_method == "TEAMS":
+            return "**", "**", " ", "\n\n"
 
         return "", "", ": ", "\n"
 
@@ -2919,6 +2950,7 @@ class OctoslackPlugin(
                                 and snapshot_upload_method == "MATRIX"
                             )
                             or connection_method == "DISCORD"
+                            or connection_method == "TEAMS"
                         ):
                             snapshot_url_to_append = None
 
@@ -3096,6 +3128,10 @@ class OctoslackPlugin(
                     channels = self._settings.get(["discord_config"], merged=True).get(
                         "webhook_urls"
                     )
+                elif connection_method == "TEAMS":
+                    channels = self._settings.get(["teams_config"], merged=True).get(
+                        "webhook_urls"
+                    )
 
             if not channels:
                 channels = ""
@@ -3123,12 +3159,12 @@ class OctoslackPlugin(
                         elif len(text) > 0:
                             text += newline
                         text += (
-                            bold_text_start
-                            + "Timelapse"
-                            + bold_text_end
-                            + name_val_sep
-                            + timelapse_url
+                            bold_text_start + "Timelapse" + bold_text_end + name_val_sep
                         )
+                        if connection_method == "TEAMS":
+                            text += "[" + timelapse_url + "](" + timelapse_url + ")"
+                        else:
+                            text += timelapse_url
 
                     if timelapse_errors:
                         if text == None:
@@ -3812,7 +3848,74 @@ class OctoslackPlugin(
                         self._logger.exception(
                             "Discord WebHook message send error: " + str(e)
                         )
+                elif (
+                    connection_method == "TEAMS"
+                    and (not channel == None)
+                    and len(channel) > 0
+                ):
+                    try:
+                        teamsWebHookUrl = channel
+                        self._logger.debug(
+                            "Teams msg channel WebHook: " + str(teamsWebHookUrl)
+                        )
 
+                        msg_color = None
+                        if color == "good":
+                            msg_color = "03B2F8"
+                        elif color == "warning":
+                            msg_color = "FFB829"
+                        elif color == "danger":
+                            msg_color = "F76363"
+
+                        msg_text = ""
+
+                        if not text == None and len(text) > 0:
+                            if len(msg_text) > 0:
+                                msg_text = msg_text + "\n\n"
+                            msg_text = msg_text + text
+
+                        teams_msg = pymsteams.connectorcard(teamsWebHookUrl)
+                        if pretext:
+                            teams_msg.title(pretext)
+                        if msg_color:
+                            teams_msg.color(msg_color)
+                        if msg_text:
+                            teams_msg.text(msg_text)
+                        if not fallback == None and len(fallback) > 0:
+                            teams_msg.summary(fallback)
+
+                        if (hosted_url and len(hosted_url) > 0) or (
+                            not footer == None and len(footer) > 0
+                        ):
+                            if hosted_url and len(hosted_url) > 0:
+                                msg_section = pymsteams.cardsection()
+                                msg_section.addImage(hosted_url)
+                                teams_msg.addSection(msg_section)
+
+                            msg_section = pymsteams.cardsection()
+                            if hosted_url and len(hosted_url) > 0:
+                                msg_section.activitySubtitle(
+                                    "[" + hosted_url + "](" + hosted_url + ")"
+                                )
+                            if not footer == None and len(footer) > 0:
+                                msg_section.activityText(footer)
+
+                            teams_msg.addSection(msg_section)
+
+                        self._logger.debug(
+                            "Teams WebHook message json: "
+                            + json.dumps(teams_msg.payload)
+                        )
+
+                        teamsRsp = teams_msg.send()
+
+                        self._logger.debug(
+                            "Teams WebHook execute response: " + str(teamsRsp)
+                        )
+                    except Exception as e:
+                        self._logger.exception(
+                            "Teams WebHook message send error: " + str(e)
+                        )
         except Exception as e:
             self._logger.exception("Send message error: " + str(e))
 
@@ -4513,9 +4616,90 @@ class OctoslackPlugin(
             combined_image, error_msg = self.combine_images(downloaded_images)
             if not error_msg == None:
                 error_msgs.append(error_msg)
-            return combined_image, error_msgs
+            return self.resize_snapshot(combined_image, error_msgs)
         else:
-            return downloaded_images[0], error_msgs
+            return self.resize_snapshot(downloaded_images[0], error_msgs)
+
+    def resize_snapshot(self, local_file_path, error_msgs):
+        connection_method = self.connection_method()
+        if not connection_method == "TEAMS":
+            return local_file_path, error_msgs
+
+        temp_fd = None
+        temp_filename = None
+        try:
+            resize_image_start = time.time()
+
+            img = Image.open(local_file_path)
+            width, height = img.size
+
+            ##Higher than documented limits but these appear to work so we'll use them
+            max_x = 1920
+            max_y = 1080
+
+            # Image already fits
+            if width <= max_x and height <= max_y:
+                return local_file_path, error_msgs
+
+            x_pct = max_x / (width * 1.0)
+            y_pct = max_y / (height * 1.0)
+
+            resize_pct = min(x_pct, y_pct)
+
+            new_x = int(width * resize_pct)
+            new_y = int(height * resize_pct)
+
+            new_size = (new_x, new_y)
+
+            self._logger.debug(
+                "Resizing snapshot image. Orig X,Y: ("
+                + str(width)
+                + ","
+                + str(height)
+                + "), New X,Y: ("
+                + str(new_size[0])
+                + ","
+                + str(new_size[1])
+                + ")"
+            )
+
+            new_img = img.resize(new_size)
+
+            temp_fd, temp_filename = mkstemp()
+            os.close(temp_fd)
+
+            temp_filename = self.rename_snapshot_filename(temp_filename)
+
+            self._logger.debug("Resized image temp filename: " + str(temp_filename))
+            new_img.save(temp_filename, "JPEG")
+
+            statinfo = os.stat(temp_filename)
+            new_img_size = statinfo.st_size
+
+            resize_image_elapsed = time.time() - resize_image_start
+            self._logger.debug(
+                "Resized image ("
+                + octoprint.util.get_formatted_size(new_img_size)
+                + ") in "
+                + str(round(resize_image_elapsed, 2))
+                + " seconds"
+            )
+
+            img.close()
+            new_img.close()
+
+            self.delete_file(local_file_path)
+
+            return temp_filename, error_msgs
+        except Exception as e:
+            self._logger.exception("Error opening snapshot image: " + str(e))
+            error_msgs.append(str(e))
+            return local_file_path, error_msgs
+
+        self._logger.debug(
+            "Rename tmp file - Existing tmp filename: " + str(tmp_filename)
+        )
+        return local_file_path, error_msgs
 
     def generate_snapshot_filename(self):
         return "Snapshot_" + str(uuid.uuid1()).replace("-", "") + ".png"
@@ -4645,6 +4829,7 @@ class OctoslackPlugin(
                     tmp_img = tmp_img.convert("RGB")
 
                 tmp_img.save(temp_filename, "JPEG")
+                tmp_img.close()
 
             responses[rsp_idx] = (temp_filename, None)
         except Exception as e:
@@ -4657,7 +4842,6 @@ class OctoslackPlugin(
                 imgData.close()
 
     def combine_images(self, local_paths):
-
         temp_fd = None
         temp_filename = None
 
@@ -4835,6 +5019,7 @@ class OctoslackPlugin(
 
             self._logger.debug("Combine image temp filename: " + str(temp_filename))
             new_im.save(temp_filename, "JPEG")
+            new_im.close()
 
             statinfo = os.stat(temp_filename)
             new_img_size = statinfo.st_size

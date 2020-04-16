@@ -53,10 +53,11 @@ plugin_requires = [
     "rocket-python",
     "matrix_client",
     "discord-webhook",
+    "pymsteams",
     "six>=1.9.0",
 ]
 
-if sys.version[0] == '2':
+if sys.version[0] == "2":
     plugin_requires.append("slackclient<2.0.0")
 else:
     plugin_requires.append("slackclient>2.0.0")

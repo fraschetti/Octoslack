@@ -198,11 +198,12 @@ var Octoslack = {
 	}
     },
 
-    allow_slack_msg_attrs : function() {
+    allow_msg_fallback_attrs : function() {
 	var connection_method = $("#octoslack_connection_method_hidden").val();
 	switch(connection_method) {
 	    case "APITOKEN":
 	    case "WEBHOOK":
+	    case "TEAMS":
 	        return true;
 	}
 
@@ -216,7 +217,7 @@ var Octoslack = {
 
     allow_channel_override_attr : function() {
 	var connection_method = $("#octoslack_connection_method_hidden").val();
-	return connection_method !== "DISCORD";
+	return connection_method !== "DISCORD" && connection_method !== "TEAMS";
     },
 
 
@@ -230,6 +231,7 @@ var Octoslack = {
         var rocketchat_config_section = $("#octoslack_rocketchat_config_section");
         var matrix_config_section = $("#octoslack_matrix_config_section");
         var discord_config_section = $("#octoslack_discord_config_section");
+        var teams_config_section = $("#octoslack_teams_config_section");
 
         slack_config_section.attr("class", "octoslack_hidden");
         pushbullet_config_section.attr("class", "octoslack_hidden"); 
@@ -237,6 +239,7 @@ var Octoslack = {
         rocketchat_config_section.attr("class", "octoslack_hidden"); 
         matrix_config_section.attr("class", "octoslack_hidden"); 
         discord_config_section.attr("class", "octoslack_hidden"); 
+        teams_config_section.attr("class", "octoslack_hidden"); 
 
         var apiTokenGroup = $("#octoslack_apitoken_group");
         var webhookGroup = $("#octolack_webhook_group");
@@ -288,6 +291,9 @@ var Octoslack = {
                 discord_config_section.attr("class", "octoslack_visible");
                 discordUploadOption.attr("class", "octoslack_visible");
                 break;
+           case "TEAMS":
+        	teams_config_section.attr("class", "octoslack_visible"); 
+                break;
         }
 
         var connection_method_hidden = $("#octoslack_connection_method_hidden");
@@ -295,9 +301,9 @@ var Octoslack = {
         connection_method_hidden.trigger('change');
 
 	//Not all services support all config items
-	var allow_slack_attrs = Octoslack.allow_slack_msg_attrs();
-	$( "div[octoslack_msg_slack]" ).each(function() {
-	    $(this).attr("class", allow_slack_attrs ? "octoprint_config_row octoslack_visible" : "octoprint_config_row octoslack_hidden");
+	var allow_fallback_attrs = Octoslack.allow_msg_fallback_attrs();
+	$( "div[octoslack_msg_fallback]" ).each(function() {
+	    $(this).attr("class", allow_fallback_attrs ? "octoprint_config_row octoslack_visible" : "octoprint_config_row octoslack_hidden");
 	});
 
 	var allow_pushover_attrs = Octoslack.allow_pushover_msg_attrs();
@@ -842,7 +848,7 @@ var Octoslack = {
 
             if(eventType == "GCODE") {
                 //Color
-	        eventHtml.push("        <div class='octoprint_config_row' octoslack_msg_slack>");
+	        eventHtml.push("        <div class='octoprint_config_row' octoslack_msg_fallback");
 	        eventHtml.push("            <select class='octoslack_select' id='octoslack_event_" + internalName + "_color'>");
 	        eventHtml.push("                <option value='good'" + (customColor == 'good' ? ' selected' : '') + ">OK</option>");
 	        eventHtml.push("                <option value='warning'" + (customColor == 'warning' ? ' selected' : '') + ">Warning</option>");
@@ -910,7 +916,7 @@ var Octoslack = {
 	    eventHtml.push("        </div>");
 
 	    //Fallback
-	    eventHtml.push("        <div class='octoprint_config_row' octoslack_msg_slack>");
+	    eventHtml.push("        <div class='octoprint_config_row' octoslack_msg_fallback>");
 	    eventHtml.push("            <textarea class='octoslack_width_auto' rows='2' cols='60' id='octoslack_event_" + internalName + "_fallback' " 
                 + (useDataBind ? "data-bind='textInput: settings.plugins.Octoslack.supported_events." + internalName + ".Fallback'" : "")
                 + ">"
