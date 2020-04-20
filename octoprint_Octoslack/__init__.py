@@ -1053,6 +1053,16 @@ class OctoslackPlugin(
                         and analysis_result["analysisPending"]
                     ):
                         return
+            elif event == "plugin_octolapse_movie_done":
+                self._logger.debug("Got Octolapse 'Timelapse Done' Event. Forwarding to 'MovieDone'")
+                self.handle_event("MovieDone",
+                                  channel_override,
+                                  payload,
+                                  override_notification_enabled_check,
+                                  override_command_enabled_check,
+                                  event_settings_overrides
+                )
+                return
 
             supported_events = self._settings.get(["supported_events"], merged=True)
             if supported_events == None or not event in supported_events:
