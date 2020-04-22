@@ -1000,19 +1000,30 @@ class OctoslackPlugin(
         override_command_enabled_check,
         event_settings_overrides,
     ):
+        if not payload:
+            payload = {}
+
         try:
-            if event == "PrintCancelled":
+            if event == "PrintCancelling":
+                payload["slack_rtm_user"] = self.slack_rtm_stop_user
+            elif event == "PrintCancelled":
                 self.stop_progress_timer()
                 self.print_cancel_time = time.time()
                 self._bot_progress_last_req = None
                 with self._bot_progress_last_snapshot_queue.mutex:
                     self._bot_progress_last_snapshot_queue.queue.clear()
+                payload["slack_rtm_user"] = self.slack_rtm_stop_user
+                self.slack_rtm_stop_user = None
+                self.slack_rtm_pause_user = None
+                self.slack_rtm_resume_user = None
             elif event == "PrintFailed":
                 self.stop_progress_timer()
                 self._bot_progress_last_req = None
                 with self._bot_progress_last_snapshot_queue.mutex:
                     self._bot_progress_last_snapshot_queue.queue.clear()
-
+                self.slack_rtm_stop_user = None
+                self.slack_rtm_pause_user = None
+                self.slack_rtm_resume_user = None
                 ignore_cancel_fail_event = self._settings.get(
                     ["ignore_cancel_fail_event"], merged=True
                 )
@@ -1034,12 +1045,25 @@ class OctoslackPlugin(
                 with self._bot_progress_last_snapshot_queue.mutex:
                     self._bot_progress_last_snapshot_queue.queue.clear()
                 self._slack_next_progress_snapshot_time = 0
+                ##TODO Remove if start is ever added to the supported Slack commands
+                self.slack_rtm_stop_user = None
+                self.slack_rtm_pause_user = None
+                self.slack_rtm_resume_user = None
+            elif event == "PrintPaused":
+                payload["slack_rtm_user"] = self.slack_rtm_pause_user
+                self.slack_rtm_pause_user = None
+            elif event == "PrintResumed":
+                payload["slack_rtm_user"] = self.slack_rtm_resume_user
+                self.slack_rtm_resume_user = None
             elif event == "PrintDone":
                 self.stop_progress_timer()
                 self.print_cancel_time = None
                 self._bot_progress_last_req = None
                 with self._bot_progress_last_snapshot_queue.mutex:
                     self._bot_progress_last_snapshot_queue.queue.clear()
+                self.slack_rtm_stop_user = None
+                self.slack_rtm_pause_user = None
+                self.slack_rtm_resume_user = None
             elif event == "ZChange":
                 if self.process_zheight_change(payload):
                     self.handle_event("Progress", None, payload, False, False, None)
@@ -1228,6 +1252,7 @@ class OctoslackPlugin(
             "{hostname}": "N/A",
             "{fqdn}": "N/A",
             "{printer_status}": "N/A",
+            "{octoprint_user}": "N/A",
         }
 
         printer_data = self._printer.get_current_data()
@@ -1324,6 +1349,11 @@ class OctoslackPlugin(
         if event == "Heartbeat" and self._printer.is_closed_or_error():
             color = "danger"
 
+        octoprint_user = None
+        if "user" in job_state:
+            octoprint_user = job_state["user"]
+            replacement_params["{octoprint_user}"] = printer_text
+
         if reportJobState:
             print_origin = job_state["file"]["origin"]
             print_origin = self.get_origin_text(print_origin)
@@ -1342,6 +1372,30 @@ class OctoslackPlugin(
 
             text_arr.append(
                 bold_text_start + "File" + bold_text_end + name_val_sep + jobStateStr
+            )
+
+            if octoprint_user:
+                octoprint_user_label = "User"
+                if (
+                    "slack_rtm_user" in event_payload
+                    and event_payload["slack_rtm_user"]
+                ):
+                    octoprint_user_label = "OctoPrint User"
+                text_arr.append(
+                    bold_text_start
+                    + octoprint_user_label
+                    + bold_text_end
+                    + name_val_sep
+                    + octoprint_user
+                )
+
+        if "slack_rtm_user" in event_payload and event_payload["slack_rtm_user"]:
+            text_arr.append(
+                bold_text_start
+                + "Slack User"
+                + bold_text_end
+                + name_val_sep
+                + event_payload["slack_rtm_user"]
             )
 
         if reportJobOrigEstimate:
@@ -2123,6 +2177,10 @@ class OctoslackPlugin(
 
         self.process_rtm_message(slackAPIToken, msg_text, msg_user, msg_channel, msg_ts)
 
+    slack_rtm_stop_user = None
+    slack_rtm_pause_user = None
+    slack_rtm_resume_user = None
+
     def process_rtm_message(
         self, slackAPIToken, msg_text, msg_user, msg_channel, msg_ts
     ):
@@ -2136,6 +2194,8 @@ class OctoslackPlugin(
             + ", TS: "
             + str(msg_ts)
         )
+
+        ##TODO ignore if the msg source is this bot
 
         if not self._settings.get(["slack_apitoken_config"], merged=True).get(
             "enable_commands"
@@ -2280,6 +2340,8 @@ class OctoslackPlugin(
                     slackAPIToken, msg_channel, msg_ts, processing_reaction, False
                 )
 
+                self.slack_rtm_stop_user = source_username
+
                 self._printer.cancel_print()
                 reaction = positive_reaction
             else:
@@ -2300,6 +2362,9 @@ class OctoslackPlugin(
                 self.add_message_reaction(
                     slackAPIToken, msg_channel, msg_ts, processing_reaction, False
                 )
+
+                self.slack_rtm_pause_user = source_username
+
                 self._printer.toggle_pause_print()
                 reaction = positive_reaction
             else:
@@ -2319,6 +2384,8 @@ class OctoslackPlugin(
                 self.add_message_reaction(
                     slackAPIToken, msg_channel, msg_ts, processing_reaction, False
                 )
+
+                self.slack_rtm_resume_user = source_username
 
                 self._printer.toggle_pause_print()
                 reaction = positive_reaction
