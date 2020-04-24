@@ -2001,9 +2001,7 @@ class OctoslackPlugin(
                     if read_msgs:
                         for msg in read_msgs:
                             try:
-                                self._logger.debug(
-                                    "Slack RTM (v1) Message: " + str(msg)
-                                )
+                                self._logger.debug("Slack RTM (v1) Message: " + str(msg))
 
                                 if (
                                     msg.get("type") != "message"
@@ -2012,6 +2010,9 @@ class OctoslackPlugin(
                                     continue
 
                                 msg_text = msg.get("text", "")
+                                if len(msg_text.strip()) == 0:
+                                    continue
+
                                 msg_user = msg.get("user")
                                 msg_channel = msg.get("channel")
                                 msg_ts = msg.get("ts")
@@ -2170,7 +2171,11 @@ class OctoslackPlugin(
         slackAPIToken = payload["rtm_client"].token
 
         data = payload["data"]
+
         msg_text = data["text"]
+        if not msg_text or len(msg_text.strip()) == 0:
+            return
+
         msg_user = data["user"]
         msg_channel = data["channel"]
         msg_ts = data["ts"]
