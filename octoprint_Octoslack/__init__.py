@@ -1253,6 +1253,7 @@ class OctoslackPlugin(
             "{fqdn}": "N/A",
             "{printer_status}": "N/A",
             "{octoprint_user}": "N/A",
+            "{slack_user}": "N/A",
         }
 
         printer_data = self._printer.get_current_data()
@@ -1350,9 +1351,13 @@ class OctoslackPlugin(
             color = "danger"
 
         octoprint_user = None
-        if "user" in job_state:
+        if "user" in job_state and job_state["user"]:
             octoprint_user = job_state["user"]
-            replacement_params["{octoprint_user}"] = printer_text
+            replacement_params["{octoprint_user}"] = octoprint_user
+
+        slack_user = None
+        if "slack_rtm_user" in event_payload and event_payload["slack_rtm_user"]:
+            replacement_params["{slack_user}"] = slack_user
 
         if reportJobState:
             print_origin = job_state["file"]["origin"]
@@ -1389,7 +1394,9 @@ class OctoslackPlugin(
                     + octoprint_user
                 )
 
+        slack_user = None
         if "slack_rtm_user" in event_payload and event_payload["slack_rtm_user"]:
+            slack_user = event_payload["slack_rtm_user"]
             text_arr.append(
                 bold_text_start
                 + "Slack User"
@@ -1397,6 +1404,7 @@ class OctoslackPlugin(
                 + name_val_sep
                 + event_payload["slack_rtm_user"]
             )
+            replacement_params["{slack_user}"] = slack_user
 
         if reportJobOrigEstimate:
             estimatedPrintTime = None
@@ -1717,6 +1725,9 @@ class OctoslackPlugin(
             text = newline.join(text_arr)
 
         for param in replacement_params:
+            if replacement_params[param] == None:
+                continue
+
             if not fallback == None:
                 fallback = fallback.replace(param, replacement_params[param])
             if not pretext == None:
