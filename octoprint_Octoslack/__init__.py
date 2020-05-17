@@ -2387,8 +2387,18 @@ class OctoslackPlugin(
                     #    + ", Limit: "
                     #    + str(limit)
                     # )
-                    history_rsp = slack.conversations.history(
-                        conversation_id, oldest=last_ts, limit=limit
+                    ##Python3 only
+                    #history_rsp = slack.conversations.history(
+                    #    conversation_id, oldest=last_ts, limit=limit
+                    #)
+                    ##Needed for Python2 support
+                    history_rsp = slack.users.get(
+                        "conversations.history",
+                        params={
+                            'channel': conversation_id,
+                            'oldest': last_ts,
+                            'limit': limit
+                        },
                     )
                 else:
                     # self._logger.debug(
@@ -2401,8 +2411,19 @@ class OctoslackPlugin(
                     #    + ", Limit: "
                     #    + str(limit)
                     # )
-                    history_rsp = slack.conversations.history(
-                        conversation_id, oldest=last_ts, cursor=next_cursor, limit=limit
+                    ##Python3 only
+                    #history_rsp = slack.conversations.history(
+                    #    conversation_id, oldest=last_ts, cursor=next_cursor, limit=limit
+                    #)
+                    ##Needed for Python2 support
+                    history_rsp = slack.users.get(
+                        "conversations.history",
+                        params={
+                            'channel': conversation_id,
+                            'cursor': next_cursor,
+                            'oldest': last_ts,
+                            'limit': limit
+                        },
                     )
                 has_more = False
                 next_cursor = None
