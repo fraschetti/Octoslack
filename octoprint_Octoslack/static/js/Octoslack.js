@@ -38,18 +38,13 @@ var Octoslack = {
 	this.buildOctoPrintEventConfigs();
     },
 
-    last_connection_method : null,
-    last_bot_commands : null,
-
     afterBindingInit : function() {
         this.setInitialInputStates();
         this.buildSnapshotURLsTable();
         this.buildGcodeEventsTable();
 	this.applyMattermostChanges();
+	this.applyClassicBotChanges();
 	this.populateTimezones();
-
-	this.last_connection_method = $("#octoslack_connection_method_hidden").val();
-	this.last_bot_commands = $("#octoslack_bot_commands").is(":checked");
 
         this.changeImgurClientID();
         $("#octoslack_imgur_refresh_token").bind('input propertychange', function() { Octoslack.changeImgurRefreshToken(); });
@@ -92,6 +87,22 @@ var Octoslack = {
 	} else {
 		$('#octoslack_custom_identity_icon_emoji').removeAttr('disabled');
 	}
+    },
+
+    applyClassicBotChanges : function() {
+        var classic_bot_enabled = $("#octoslack_slack_classic_bot").is(":checked");
+
+	if(classic_bot_enabled) {
+		$('#octoslack_slack_force_rtm').removeAttr('disabled');
+	        $('#octoslack_slack_identity_check').removeAttr('disabled');
+	} else {
+                $('#octoslack_slack_force_rtm').prop('checked', false);
+                $('#octoslack_slack_identity_check').prop('checked', true);
+		$('#octoslack_slack_force_rtm').attr('disabled', 'disabled');
+		$('#octoslack_slack_identity_check').attr('disabled', 'disabled');
+	}
+
+	this.toggleUseSlackIdentity();
     },
 
     applySlackUploadChanges : function() {
@@ -163,32 +174,6 @@ var Octoslack = {
 	if(new_connection_method == "APITOKEN" && new_channel.trim().length == 0) {
 		var title = "Required Octoslack field not populated";
 		var text = "When using the API Token for Slack connectivity, a Slack channel must be provided";
-		var message = $("<p></p>")
-                	.append(text);
-            	showMessageDialog({
-                	title: gettext(title),
-                	message: message
-            	});
-	}
-
- 	var restart_needed = false;
-
-	var new_bot_commands = $("#octoslack_bot_commands").is(":checked");
-	var apitoken_set = $('#octoslack_apitoken').val().trim().length > 0;
-
-	if(this.last_connection_method == "APITOKEN" && apitoken_set && (this.last_bot_commands != new_bot_commands))
-		restart_needed = true;
-	else if(this.last_connection_method == "APITOKEN" && new_connection_method != "APITOKEN" && apitoken_set && this.last_bot_commands)
-		restart_needed = true;
-	else if(this.last_connection_method != "APITOKEN" && new_connection_method == "APITOKEN" && apitoken_set && new_bot_commands)
-		restart_needed = true;
-
-	this.last_connection_method = $("#octoslack_connection_method_hidden").val();
-	this.last_bot_commands = $("#octoslack_bot_commands").is(":checked");
-
-	if(restart_needed) {
-		var title = "OctoPrint restart required";
-		var text = "A change to an Octoslack setting requiring an OctoPrint restart has been changed. The new setting value will not take effect until OctoPrint has been restarted";
 		var message = $("<p></p>")
                 	.append(text);
             	showMessageDialog({
@@ -316,13 +301,24 @@ var Octoslack = {
 	});
 
 	this.applyMattermostChanges();
+	this.applyClassicBotChanges();
     },
 
     toggleUseSlackIdentity : function(checkbox) {
-        var checked = checkbox.checked;
-        var custom_identity_div = $("#octoslack_custom_identity_group");
+        if(checkbox === undefined)
+	    checkbox = $("#octoslack_slack_identity_check")[0];
 
-        custom_identity_div.attr("class", checked ? "octoslack_hidden" : "octoslack_visible");
+        var checked = checkbox.checked;
+
+        if(checked) {
+            $('#octoslack_custom_identity_username').attr('disabled', 'disabled');
+            $('#octoslack_custom_identity_icon_emoji').attr('disabled', 'disabled');
+            $('#octoslack_custom_identity_icon_url').attr('disabled', 'disabled');
+        } else {
+	    $('#octoslack_custom_identity_username').removeAttr('disabled');
+	    $('#octoslack_custom_identity_icon_emoji').removeAttr('disabled');
+	    $('#octoslack_custom_identity_icon_url').removeAttr('disabled');
+        }
     },
 
     changeSnapshotUploadMethod : function(selection) {

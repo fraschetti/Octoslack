@@ -85,6 +85,9 @@ class OctoslackPlugin(
             "connection_method": "APITOKEN",
             "slack_apitoken_config": {
                 "api_token": "",
+                "classic_bot": False,
+                "force_rtm": False,
+                "alternate_bot_username": "",
                 "enable_commands": True,
                 "commands_positive_reaction": ":thumbsup:",
                 "commands_negative_reaction": ":thumbsdown:",
@@ -699,18 +702,33 @@ class OctoslackPlugin(
         )
 
     def get_settings_version(self):
-        return 1
+        return 2
+
+    def on_settings_migrate(self, target, current=None):
+        if current == None:
+            return
+
+        if current < 2:  ##All 1 --> 2 changes
+            existing_alt_username = self._settings.get(
+                ["slack_identity"], merged=True
+            ).get("username")
+            if existing_alt_username:
+                self._settings.set(
+                    ["slack_apitoken_config", "alternate_bot_username"],
+                    existing_alt_username,
+                )
 
     def on_settings_save(self, data):
         try:
             octoprint.plugin.SettingsPlugin.on_settings_save(self, data)
+            self.start_bot_listener()
             self.update_progress_timer()
             self.update_heartbeat_timer()
             self.update_gcode_sent_listeners()
             self._slack_next_progress_snapshot_time = 0
         except Exception as e:
             self._logger.exception(
-                "Error executing post-save actions, Error: " + str(e.message)
+                "Error executing post-save actions, Error: " + str(e)
             )
 
     ##~ TemplatePlugin mixin
@@ -753,10 +771,7 @@ class OctoslackPlugin(
         ##~~ StartupPlugin mixin
 
     def on_after_startup(self):
-        self._logger.debug("Entering Slack RTM client init logic")
-        self.start_rtm_client()
-        self._logger.debug("Exited Slack RTM client init logic")
-
+        self.start_bot_listener()
         self.update_gcode_sent_listeners()
 
         self.start_heartbeat_timer()
@@ -764,7 +779,7 @@ class OctoslackPlugin(
         ##~~ ShutdownPlugin mixin
 
     def on_shutdown(self):
-        self.stop_rtm_client()
+        self.stop_bot_listener()
 
         self._logger.debug("Stopped Slack RTM client")
 
@@ -798,9 +813,7 @@ class OctoslackPlugin(
                     "Progress", None, {"progress": progress}, False, False, None
                 )
         except Exception as e:
-            self._logger.exception(
-                "Error processing progress event, Error: " + str(e.message)
-            )
+            self._logger.exception("Error processing progress event, Error: " + str(e))
 
             ##~~ EventPlugin mixin
 
@@ -1005,25 +1018,25 @@ class OctoslackPlugin(
 
         try:
             if event == "PrintCancelling":
-                payload["slack_rtm_user"] = self.slack_rtm_stop_user
+                payload["slack_rtm_user"] = self.slack_cmd_stop_user
             elif event == "PrintCancelled":
                 self.stop_progress_timer()
                 self.print_cancel_time = time.time()
                 self._bot_progress_last_req = None
                 with self._bot_progress_last_snapshot_queue.mutex:
                     self._bot_progress_last_snapshot_queue.queue.clear()
-                payload["slack_rtm_user"] = self.slack_rtm_stop_user
-                self.slack_rtm_stop_user = None
-                self.slack_rtm_pause_user = None
-                self.slack_rtm_resume_user = None
+                payload["slack_rtm_user"] = self.slack_cmd_stop_user
+                self.slack_cmd_stop_user = None
+                self.slack_cmd_pause_user = None
+                self.slack_cmd_resume_user = None
             elif event == "PrintFailed":
                 self.stop_progress_timer()
                 self._bot_progress_last_req = None
                 with self._bot_progress_last_snapshot_queue.mutex:
                     self._bot_progress_last_snapshot_queue.queue.clear()
-                self.slack_rtm_stop_user = None
-                self.slack_rtm_pause_user = None
-                self.slack_rtm_resume_user = None
+                self.slack_cmd_stop_user = None
+                self.slack_cmd_pause_user = None
+                self.slack_cmd_resume_user = None
                 ignore_cancel_fail_event = self._settings.get(
                     ["ignore_cancel_fail_event"], merged=True
                 )
@@ -1046,24 +1059,24 @@ class OctoslackPlugin(
                     self._bot_progress_last_snapshot_queue.queue.clear()
                 self._slack_next_progress_snapshot_time = 0
                 ##TODO Remove if start is ever added to the supported Slack commands
-                self.slack_rtm_stop_user = None
-                self.slack_rtm_pause_user = None
-                self.slack_rtm_resume_user = None
+                self.slack_cmd_stop_user = None
+                self.slack_cmd_pause_user = None
+                self.slack_cmd_resume_user = None
             elif event == "PrintPaused":
-                payload["slack_rtm_user"] = self.slack_rtm_pause_user
-                self.slack_rtm_pause_user = None
+                payload["slack_rtm_user"] = self.slack_cmd_pause_user
+                self.slack_cmd_pause_user = None
             elif event == "PrintResumed":
-                payload["slack_rtm_user"] = self.slack_rtm_resume_user
-                self.slack_rtm_resume_user = None
+                payload["slack_rtm_user"] = self.slack_cmd_resume_user
+                self.slack_cmd_resume_user = None
             elif event == "PrintDone":
                 self.stop_progress_timer()
                 self.print_cancel_time = None
                 self._bot_progress_last_req = None
                 with self._bot_progress_last_snapshot_queue.mutex:
                     self._bot_progress_last_snapshot_queue.queue.clear()
-                self.slack_rtm_stop_user = None
-                self.slack_rtm_pause_user = None
-                self.slack_rtm_resume_user = None
+                self.slack_cmd_stop_user = None
+                self.slack_cmd_pause_user = None
+                self.slack_cmd_resume_user = None
             elif event == "ZChange":
                 if self.process_zheight_change(payload):
                     self.handle_event("Progress", None, payload, False, False, None)
@@ -1164,7 +1177,7 @@ class OctoslackPlugin(
             )
         except Exception as e:
             self._logger.exception(
-                "Error processing event: " + event + ", Error: " + str(e.message)
+                "Error processing event: " + event + ", Error: " + str(e)
             )
 
     def get_origin_text(self, print_origin):
@@ -1840,8 +1853,35 @@ class OctoslackPlugin(
 
         return "Fqdn detection error"
 
+    def start_bot_listener(self):
+        if self.use_slack_web_api():
+            self._logger.debug("Entering Slack Web API client init logic")
+            t = threading.Thread(target=self.start_web_api_client, args=())
+            self._logger.debug("Exited Slack Web API client init logic")
+        else:
+            self._logger.debug("Entering Slack RTM client init logic")
+            t = threading.Thread(target=self.start_rtm_client, args=())
+            self._logger.debug("Exited Slack RTM client init logic")
+
+        t.daemon = True
+        t.start()
+
+    def stop_bot_listener(self):
+        self.stop_rtm_client()
+        self.stop_web_api_client()
+
     slack_rtm_v2 = None
     slack_rtm_v2_registered = False
+
+    def use_slack_web_api(self):
+        classic_bot = self._settings.get(["slack_apitoken_config"], merged=True).get(
+            "classic_bot"
+        )
+        force_rtm = self._settings.get(["slack_apitoken_config"], merged=True).get(
+            "force_rtm"
+        )
+
+        return not classic_bot or not force_rtm
 
     def start_rtm_client(self):
         self.stop_rtm_client()
@@ -1876,7 +1916,7 @@ class OctoslackPlugin(
         try:
             # Python2
             type(SlackClient)
-            t = threading.Thread(target=self.execute_rtm_v1, args=(slackAPIToken,))
+            t = threading.Thread(target=self.execute_rtm_loop_v1, args=(slackAPIToken,))
         except NameError:
             if not self.slack_rtm_v2_registered:
                 self.slack_rtm_v2_registered = True
@@ -1891,7 +1931,7 @@ class OctoslackPlugin(
                 dec_func(self.process_rtm_v2_message)
 
             # Python3
-            t = threading.Thread(target=self.execute_rtm_v2, args=(slackAPIToken,))
+            t = threading.Thread(target=self.execute_rtm_loop_v2, args=(slackAPIToken,))
 
         t.daemon = True
         t.start()
@@ -1910,7 +1950,59 @@ class OctoslackPlugin(
                     "Failed to stop Slack RTM (v2) client: " + str(e)
                 )
 
-    def execute_rtm_v1(self, slackAPIToken):
+    web_api_keep_running = False
+    web_api_running = False
+
+    def start_web_api_client(self):
+        self.stop_web_api_client()
+
+        if not self._settings.get(["slack_apitoken_config"], merged=True).get(
+            "enable_commands"
+        ):
+            return
+
+        self._logger.debug("Starting Slack Web API client")
+
+        connection_method = self.connection_method()
+        if connection_method == None or connection_method != "APITOKEN":
+            self._logger.debug("Slack Web API client not enabled")
+            return
+
+        slackAPIToken = self._settings.get(["slack_apitoken_config"], merged=True).get(
+            "api_token"
+        )
+        if not slackAPIToken:
+            self._logger.warn(
+                "Cannot enable Slack Web API client for responding to commands without an API Key"
+            )
+            return
+
+        slackAPIToken = slackAPIToken.strip()
+
+        self._logger.debug("Before Slack Web API client start")
+
+        self.web_api_keep_running = True
+        self.web_api_running = False
+        self.bot_user_id = None
+
+        t = threading.Thread(target=self.execute_web_api_loop, args=(slackAPIToken,))
+        t.daemon = True
+        t.start()
+
+        self._logger.debug("After Slack Web API client start")
+
+    def stop_web_api_client(self):
+        self._logger.debug("Stopping Slack Web API client")
+        self.web_api_keep_running = False
+
+        while self.web_api_running:
+            time.sleep(0.1)
+
+        self.bot_channels = None
+        self.bot_conversations_map = {}
+        self.last_conversations_ts = {}
+
+    def execute_rtm_loop_v1(self, slackAPIToken):
         try:
             ping_interval = 30
 
@@ -2001,12 +2093,17 @@ class OctoslackPlugin(
                     if read_msgs:
                         for msg in read_msgs:
                             try:
-                                self._logger.debug("Slack RTM (v1) Message: " + str(msg))
+                                self._logger.debug(
+                                    "Slack RTM (v1) Message: " + str(msg)
+                                )
 
                                 if (
                                     msg.get("type") != "message"
                                     or msg.get("text") == None
                                 ):
+                                    continue
+
+                                if not "ts" in msg or not "user" in msg:
                                     continue
 
                                 msg_text = msg.get("text", "")
@@ -2049,7 +2146,7 @@ class OctoslackPlugin(
                 except WebSocketConnectionClosedException as ce:
                     self._logger.error(
                         "Slack RTM (v1) API read error (WebSocketConnectionClosedException): "
-                        + str(ce.message),
+                        + str(ce),
                         exc_info=ce,
                     )
                     time.sleep(1)
@@ -2088,9 +2185,7 @@ class OctoslackPlugin(
 
             self._logger.debug("Finished Slack RTM (v1) read loop")
         except Exception as e:
-            self._logger.exception(
-                "Error in Slack RTM read loop, Error: " + str(e.message)
-            )
+            self._logger.exception("Error in Slack RTM read loop, Error: " + str(e))
 
     def get_rtm_reconnect_delay(self, iteration):
         max_delay = 1800  ##30 minutes
@@ -2106,14 +2201,14 @@ class OctoslackPlugin(
                 "Slack RTM reconnect delay calculation error (iteration="
                 + str(iteration)
                 + "), Error: "
-                + str(e.message)
+                + str(e)
             )
             return max_delay
 
     def nonop_add_signal_handler(self, sig, callback, *args):
         return
 
-    def execute_rtm_v2(self, slackAPIToken):
+    def execute_rtm_loop_v2(self, slackAPIToken):
         try:
             self._logger.debug("Starting Slack RTM (v2) wait loop")
 
@@ -2163,6 +2258,9 @@ class OctoslackPlugin(
 
     def process_rtm_v2_message(self, **payload):
         self._logger.debug("Slack RTM (v2) Message: " + str(payload))
+        if payload == None or "data" not in payload or payload["data"] == None:
+            self._logger.debug("Ignoring Slack RTM (v2) Message")
+            return
 
         if "client_msg_id" not in payload["data"] or "text" not in payload["data"]:
             self._logger.debug("Ignoring Slack RTM (v2) Message")
@@ -2171,6 +2269,9 @@ class OctoslackPlugin(
         slackAPIToken = payload["rtm_client"].token
 
         data = payload["data"]
+
+        if not "ts" in data or not "user" in data:
+            return
 
         msg_text = data["text"]
         if not msg_text or len(msg_text.strip()) == 0:
@@ -2193,15 +2294,273 @@ class OctoslackPlugin(
 
         self.process_rtm_message(slackAPIToken, msg_text, msg_user, msg_channel, msg_ts)
 
-    slack_rtm_stop_user = None
-    slack_rtm_pause_user = None
-    slack_rtm_resume_user = None
+    bot_channels = None
+    bot_conversations_map = {}
+    last_conversations_ts = {}
+
+    channels_refresh_interval = 10
+
+    def execute_web_api_loop(self, slackAPIToken):
+        try:
+            self._logger.debug("Starting Slack Web API loop")
+
+            slackAPIConnection = Slacker(slackAPIToken, timeout=SLACKER_TIMEOUT)
+
+            auth_rsp = slackAPIConnection.auth.test()
+            self._logger.debug(
+                "Slack Web API auth test response: " + json.dumps(auth_rsp.body)
+            )
+
+            if auth_rsp.successful == None or auth_rsp.successful == False:
+                self._logger.error(
+                    "Slack Web API auth test failed: " + json.dumps(auth_rsp.body)
+                )
+                self._logger.warn(
+                    "Initial Slack Web API authentication failed. Exiting channel history loop. Save a new key to reattempt the connection."
+                )
+            else:
+                self.bot_user_id = auth_rsp.body["user_id"]
+                self._logger.debug("Slack Web API Bot user id: " + self.bot_user_id)
+
+            self._logger.debug("Starting Slack Web API event loop")
+
+            next_bot_channels_refresh = time.time()
+            self.web_api_running = True
+            while self.web_api_keep_running:
+                if time.time() >= next_bot_channels_refresh:
+                    self.refresh_bot_conversations(slackAPIToken)
+                    next_bot_channels_refresh = (
+                        time.time() + self.channels_refresh_interval
+                    )
+
+                if self.bot_channels == None or len(self.bot_channels) == 0:
+                    time.sleep(self.channels_refresh_interval)
+                    continue
+
+                for channel in self.bot_channels:
+                    self.retrieve_channel_history(slackAPIToken, channel)
+
+                    delay = 1.2
+                    # self._logger.debug(
+                    #    "Slack Web API sleeping for " + str(delay) + "secs"
+                    # )
+                    time.sleep(delay)
+
+            self._logger.debug("Slack Web API event loop ended")
+        except Exception as e:
+            self._logger.exception(
+                "Error in Slack Web API event loop, Error: " + str(e)
+            )
+        self.web_api_running = False
+
+    def retrieve_channel_history(self, slackAPIToken, channel):
+        conversation_id = None
+        try:
+            # self._logger.debug("Slack Web API  - Starting listen run - " + channel)
+            if not channel in self.bot_conversations_map:
+                return
+
+            conversation_id = self.bot_conversations_map[channel]
+
+            slack = Slacker(slackAPIToken)
+
+            last_ts = None
+            has_more = True
+            next_cursor = None
+
+            ##TOD also add a max duration
+            while has_more:
+                if conversation_id in self.last_conversations_ts:
+                    if next_cursor == None:
+                        last_ts = self.last_conversations_ts[conversation_id]
+                    limit = 100
+                else:
+                    last_ts = None
+                    limit = 1
+
+                if next_cursor == None:
+                    # self._logger.debug(
+                    #    "Slack Web API - Channel history call - ConversationID: "
+                    #    + conversation_id
+                    #    + ", Oldest:"
+                    #    + str(last_ts)
+                    #    + ", Limit: "
+                    #    + str(limit)
+                    # )
+                    history_rsp = slack.conversations.history(
+                        conversation_id, oldest=last_ts, limit=limit
+                    )
+                else:
+                    # self._logger.debug(
+                    #    "Slack Web API - Channel history call - ConversationID: "
+                    #    + conversation_id
+                    #    + ", Oldest:"
+                    #    + str(last_ts)
+                    #    + ", Next cursor: "
+                    #    + next_cursor
+                    #    + ", Limit: "
+                    #    + str(limit)
+                    # )
+                    history_rsp = slack.conversations.history(
+                        conversation_id, oldest=last_ts, cursor=next_cursor, limit=limit
+                    )
+                has_more = False
+                next_cursor = None
+
+                if not history_rsp.successful:
+                    if conversation_id in self.last_conversations_ts:
+                        self._logger.debug(
+                            "Slack Web API - Removing cached conversation ID TS for "
+                            + conversation_id
+                            + ". Encountered error or bot removed from channel"
+                        )
+                        del self.last_conversations_ts[conversation_id]
+                else:
+                    messages = history_rsp.body["messages"]
+                    msg_count = len(messages)
+                    if msg_count < 0:
+                        return
+
+                    if not limit == 1:
+                        has_more = history_rsp.body["has_more"]
+                        if "response_metadata" in history_rsp.body:
+                            response_metadata = history_rsp.body["response_metadata"]
+                            if "next_cursor" in response_metadata:
+                                next_cursor = response_metadata["next_cursor"].strip()
+                                if len(next_cursor) == 0:
+                                    next_cursor = None
+
+                    i = msg_count - 1
+                    while i >= 0:
+                        message = messages[i]
+                        i -= 1
+
+                        if not "ts" in message or not "user" in message:
+                            continue
+
+                        msg_user = message["user"]
+                        msg_ts = message["ts"]
+                        self.last_conversations_ts[conversation_id] = msg_ts
+
+                        if not "type" in message:
+                            continue
+
+                        msg_type = message["type"]
+                        if not msg_type == "message":
+                            continue
+
+                        msg_text = message["text"]
+
+                        if limit == 1:
+                            # Only need the latest ts
+                            continue
+
+                        if len(msg_text.strip()) == 0:
+                            continue
+
+                        self._logger.debug(
+                            "Received Slack Web API Message - Text: "
+                            + msg_text
+                            + ", User: "
+                            + msg_user
+                            + ", Channel: "
+                            + channel
+                            + ", ConversationID: "
+                            + conversation_id
+                            + ", TS: "
+                            + str(msg_ts)
+                        )
+                        self.process_rtm_message(
+                            slackAPIToken, msg_text, msg_user, conversation_id, msg_ts
+                        )
+        except Exception as e:
+            error_msg = str(e)
+            if (
+                "scope" in error_msg or "channel_not_found" in error_msg
+            ) and conversation_id in self.last_conversations_ts:
+                self._logger.exception(
+                    "Slack Web API - Removing cached conversation ID TS for "
+                    + conversation_id
+                    + ". Encountered error or bot removed from channel"
+                )
+                del self.last_conversations_ts[conversation_id]
+
+            self._logger.exception(
+                "Slack Web API - Error querying channel history: " + error_msg
+            )
+
+    def refresh_bot_conversations(self, slackAPIToken):
+        try:
+            # self._logger.debug("Slack Web API - Updating bot conversations list...")
+
+            slack = Slacker(slackAPIToken)
+
+            rsp = slack.users.get(
+                "users.conversations",
+                params={
+                    "exclude_archived": True,
+                    "types": "public_channel, private_channel",
+                },
+            )
+
+            if not rsp.successful:
+                self._logger.error(
+                    "Slack Web API - Failed to retrieve bot's channel list"
+                )
+                return
+
+            new_map = {}
+            new_channels = []
+            new_last_conversations_ts = {}
+
+            for channel in rsp.body["channels"]:
+                is_channel = "is_channel" in channel and channel["is_channel"]
+                is_group = (
+                    "is_group" in channel and channel["is_group"]
+                )  # private channel
+
+                if (
+                    (not is_channel and not is_group)
+                    or "name" not in channel
+                    or "id" not in channel
+                ):
+                    continue
+
+                channel_name = channel["name"]
+                channel_id = channel["id"]
+
+                # self._logger.debug(
+                #    "Slack Web API - Channel name: "
+                #    + str(channel_name)
+                #    + ", Channel ID: "
+                #    + channel_id
+                # )
+
+                new_map[channel_name] = channel_id
+                new_channels.append(channel_name)
+
+                if channel_id in self.last_conversations_ts:
+                    new_last_conversations_ts[channel_id] = self.last_conversations_ts[
+                        channel_id
+                    ]
+
+            # self._logger.debug("Slack Web API - Bot conversations: " + str(new_map))
+
+            self.bot_conversations_map = new_map
+            self.bot_channels = new_channels
+            self.last_conversations_ts = new_last_conversations_ts
+        except Exception as e:
+            self._logger.exception("Error refreshing bot conversations list: " + str(e))
+
+    slack_cmd_stop_user = None
+    slack_cmd_pause_user = None
+    slack_cmd_resume_user = None
 
     def process_rtm_message(
         self, slackAPIToken, msg_text, msg_user, msg_channel, msg_ts
     ):
         self._logger.debug(
-            "Processing Slack RTM Message - Text: "
+            "Processing Slack Message - Text: "
             + str(msg_text)
             + ", User: "
             + str(msg_user)
@@ -2218,13 +2577,9 @@ class OctoslackPlugin(
         ):
             return
 
-        slack_identity_config = self._settings.get(["slack_identity"], merged=True)
-        slack_as_user = slack_identity_config["existing_user"]
-        alternate_bot_name = None
-
-        if not slack_as_user:
-            if "username" in slack_identity_config:
-                alternate_bot_name = slack_identity_config["username"]
+        alternate_bot_name = self._settings.get(
+            ["slack_apitoken_config"], merged=True
+        ).get("alternate_bot_username")
 
         alternate_bot_id = None
         if not alternate_bot_name == None and len(alternate_bot_name.strip()) > 0:
@@ -2242,7 +2597,7 @@ class OctoslackPlugin(
         matched_id = None
 
         self._logger.debug(
-            "Slack RTM message - Matching bot_id: "
+            "Slack message - Matching bot_id: "
             + str(bot_id)
             + " and alternate_bot_id: "
             + str(alternate_bot_id)
@@ -2259,11 +2614,14 @@ class OctoslackPlugin(
 
         source_username = self.get_slack_username(slackAPIToken, msg_user)
         self._logger.debug(
-            "Slack RTM message source UserID: "
+            "Slack message source UserID: "
             + str(msg_user)
             + ", Username: "
             + str(source_username)
         )
+
+        if source_username == None:
+            return
 
         command = msg_text.split(matched_id)[1].strip().lower()
 
@@ -2330,7 +2688,7 @@ class OctoslackPlugin(
 
         if command == "help" and enabled_commands["help"]["enabled"]:
             self._logger.info(
-                "Slack RTM - help command - user: "
+                "Slack - help command - user: "
                 + source_username
                 + ", authorized: "
                 + str(authorized)
@@ -2342,7 +2700,7 @@ class OctoslackPlugin(
                 reaction = positive_reaction
         elif command == "stop" and enabled_commands["stop"]["enabled"]:
             self._logger.info(
-                "Slack RTM - stop command - user: "
+                "Slack - stop command - user: "
                 + source_username
                 + ", authorized: "
                 + str(authorized)
@@ -2356,7 +2714,7 @@ class OctoslackPlugin(
                     slackAPIToken, msg_channel, msg_ts, processing_reaction, False
                 )
 
-                self.slack_rtm_stop_user = source_username
+                self.slack_cmd_stop_user = source_username
 
                 self._printer.cancel_print()
                 reaction = positive_reaction
@@ -2364,7 +2722,7 @@ class OctoslackPlugin(
                 reaction = negative_reaction
         elif command == "pause" and enabled_commands["pause"]["enabled"]:
             self._logger.info(
-                "Slack RTM - pause command - user: "
+                "Slack - pause command - user: "
                 + source_username
                 + ", authorized: "
                 + str(authorized)
@@ -2379,7 +2737,7 @@ class OctoslackPlugin(
                     slackAPIToken, msg_channel, msg_ts, processing_reaction, False
                 )
 
-                self.slack_rtm_pause_user = source_username
+                self.slack_cmd_pause_user = source_username
 
                 self._printer.toggle_pause_print()
                 reaction = positive_reaction
@@ -2387,7 +2745,7 @@ class OctoslackPlugin(
                 reaction = negative_reaction
         elif command == "resume" and enabled_commands["resume"]["enabled"]:
             self._logger.info(
-                "Slack RTM - resume command - user: "
+                "Slack - resume command - user: "
                 + source_username
                 + ", authorized: "
                 + str(authorized)
@@ -2401,7 +2759,7 @@ class OctoslackPlugin(
                     slackAPIToken, msg_channel, msg_ts, processing_reaction, False
                 )
 
-                self.slack_rtm_resume_user = source_username
+                self.slack_cmd_resume_user = source_username
 
                 self._printer.toggle_pause_print()
                 reaction = positive_reaction
@@ -2410,7 +2768,7 @@ class OctoslackPlugin(
         elif command == "status" and enabled_commands["status"]["enabled"]:
             ##Send processing reaction
             self._logger.info(
-                "Slack RTM - status command - user: "
+                "Slack - status command - user: "
                 + source_username
                 + ", authorized: "
                 + str(authorized)
@@ -2470,7 +2828,7 @@ class OctoslackPlugin(
             slackAPIConnection = Slacker(slackAPIToken, timeout=SLACKER_TIMEOUT)
 
             self._logger.debug(
-                "Retrieving username for Slack RTM message - User ID: " + userid
+                "Retrieving username for Slack message - User ID: " + userid
             )
 
             user_info_rsp = slackAPIConnection.users.info(userid)
@@ -2485,10 +2843,10 @@ class OctoslackPlugin(
             return user_info_rsp.body["user"]["name"]
         except Exception as e:
             self._logger.exception(
-                "Error retrieving username for Slack RTM message - User ID: "
+                "Error retrieving username for Slack message - User ID: "
                 + userid
                 + ", Error: "
-                + str(e.message)
+                + str(e)
             )
 
     def add_message_reaction(self, slackAPIToken, channel, timestamp, reaction, remove):
@@ -2557,7 +2915,7 @@ class OctoslackPlugin(
                 + ", Remove: "
                 + str(remove)
                 + ", Error: "
-                + str(e.message)
+                + str(e)
             )
 
     def delete_file(self, filename):
@@ -3302,29 +3660,37 @@ class OctoslackPlugin(
                 "postMessage - Channels: " + channels + ", JSON: " + attachments_json
             )
 
-            slack_identity_config = self._settings.get(["slack_identity"], merged=True)
-            slack_as_user = slack_identity_config["existing_user"]
+            slack_as_user = True
             slack_icon_url = None
             slack_icon_emoji = None
             slack_username = None
 
-            if not slack_as_user:
-                if (
-                    "icon_url" in slack_identity_config
-                    and len(slack_identity_config["icon_url"].strip()) > 0
-                ):
-                    slack_icon_url = slack_identity_config["icon_url"].strip()
-                if (
-                    not self.mattermost_mode()
-                    and "icon_emoji" in slack_identity_config
-                    and len(slack_identity_config["icon_emoji"].strip()) > 0
-                ):
-                    slack_icon_emoji = slack_identity_config["icon_emoji"].strip()
-                if (
-                    "username" in slack_identity_config
-                    and len(slack_identity_config["username"].strip()) > 0
-                ):
-                    slack_username = slack_identity_config["username"].strip()
+            if self._settings.get(["slack_apitoken_config"], merged=True).get(
+                "classic_bot"
+            ):
+                slack_identity_config = self._settings.get(
+                    ["slack_identity"], merged=True
+                )
+                slack_as_user = slack_identity_config["existing_user"]
+
+                if not slack_as_user:
+                    if (
+                        "icon_url" in slack_identity_config
+                        and len(slack_identity_config["icon_url"].strip()) > 0
+                    ):
+                        slack_icon_url = slack_identity_config["icon_url"].strip()
+                    if (
+                        not self.mattermost_mode()
+                        and "icon_emoji" in slack_identity_config
+                        and len(slack_identity_config["icon_emoji"].strip()) > 0
+                    ):
+                        slack_icon_emoji = slack_identity_config["icon_emoji"].strip()
+                    if (
+                        "username" in slack_identity_config
+                        and slack_identity_config["username"]
+                        and len(slack_identity_config["username"].strip()) > 0
+                    ):
+                        slack_username = slack_identity_config["username"].strip()
 
             allow_empty_channel = connection_method == "WEBHOOK"
 
@@ -4518,7 +4884,13 @@ class OctoslackPlugin(
                         error_msgs.append("Matrix error: " + str(e))
             except Exception as e:
                 self._logger.exception("Asset upload error: %s" % str(e))
-                error_msgs.append(str(e.message))
+
+                if hasattr(e, "message"):
+                    error_msg = e.message
+                else:
+                    error_msg = str(e)
+
+                error_msgs.append(error_msg)
             finally:
                 if local_file_path:
                     self._logger.debug(
@@ -5141,7 +5513,12 @@ class OctoslackPlugin(
             self._logger.exception(
                 "Error generating combined snapshot image: %s" % (str(e))
             )
-            return None, str(e.message)
+
+            if hasattr(e, "message"):
+                error_msg = e.message
+            else:
+                error_msg = str(e)
+            return None, error_msg
 
     active_gcode_events = []
     active_gcode_received_events = []
@@ -5246,11 +5623,16 @@ class OctoslackPlugin(
                         "GcodeEvent", None, {"cmd": cmd}, False, False, gcode_event
                     )
         except Exception as e:
+            if hasattr(e, "message"):
+                error_msg = e.message
+            else:
+                error_msg = str(e)
+
             self._logger.exception(
                 "Error attempting to match sent G-code command to the configured events, G-code: "
                 + gcode
                 + ", Error: "
-                + str(e.message)
+                + error_msg
             )
 
         return (cmd,)
@@ -5294,11 +5676,16 @@ class OctoslackPlugin(
                         gcode_event,
                     )
         except Exception as e:
+            if hasattr(e, "message"):
+                error_msg = e.message
+            else:
+                error_msg = str(e)
+
             self._logger.exception(
                 "Error attempting to match received G-code command to the configured events, G-code: "
                 + line
                 + ", Error: "
-                + str(e.message)
+                + error_msg
             )
 
         return line

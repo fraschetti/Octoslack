@@ -87,7 +87,7 @@
 	<input type="hidden" id="octoslack_connection_method_hidden" data-bind="value: settings.plugins.Octoslack.connection_method">
         <div>
             <input type="radio" name="octoslack_connection_type" id="octoslack_connection_type_apitoken" onclick="Octoslack.changeConnectionType(this.value);" class="octoslack_valign octoslack_checkbox_margin_override" value="APITOKEN">
-            <span class="octoslack_valign octoslack_action_label" onclick="$('#octoslack_connection_type_apitoken').trigger('click')">Slack API Token</span>
+            <span class="octoslack_valign octoslack_action_label" onclick="$('#octoslack_connection_type_apitoken').trigger('click')">Slack App Bot Token</span>
         </div>
 	<small class="muted"><a href="https://slack.com/" target="_blank">Slack</a></small>
         <div>
@@ -95,7 +95,7 @@
             <span class="octoslack_valign octoslack_action_label" onclick="$('#octoslack_connection_type_webhook').trigger('click')">Slack/Mattermost WebHook URL</span>
         </div>
 	<small class="muted">
-            Most Slack features will be available for both connection methods but some may specifically require use of the Slack API Token
+            Most Slack features will be available for both connection methods but some may specifically require use of the Slack Bot Access Token
             </br>
             <a href="https://slack.com/" target="_blank">Slack</a> or <a href="https://mattermost.com/" target="_blank">Mattermost</a>
         </small>
@@ -137,17 +137,43 @@
             <div id="octoslack_apitoken_group" class="octoslack_hidden">
                 <br/>
                 <div class="octoprint_config_row">
-                    <span class="octoslack_label">API Token</span>
+                    <span class="octoslack_label">Slack Bot Access Token</span>
                     <input type="text" class="octoslack_width_auto" id="octoslack_apitoken" size="60" placeholder="xoxb-111111111111-aaaaaaaaaaaaaaaaaaaaaaaa" data-bind="value: settings.plugins.Octoslack.slack_apitoken_config.api_token">
 		    </br>
 		    <small class="muted">
-                        An API Token can be generated via your Slack team's settings dialog.
-                        <br/>
-                        Apps &amp; integrations --&gt; Manage --&gt; Custom Integrations --&gt; Bots
-                        <br/>
-                        NOTE: Switching to or from the API Token connection method requires an OctoPrint restart to either establish or close the associated websocket connection
+                        The Slack Bot Access Token is available the <strong>OAuth & Permissions</strong> section of your <a href="https://api.slack.com/apps" target="_blank">Slack App</a>.
+                        </br>
+                        The token is only available once the app has been installed to your workspace. Before the app can be installed to your workspace, various scopes/permissions must be granted to your app (see below)
                     </small>
                 </div>
+		<small class="muted">
+                    <br/>
+		    Bot Token Scopes requied for posting to a channel
+		    <br/>
+		    <p class="octoslack_indented">
+	                channels:read
+		        <br/>
+		        chat:write
+		        <br/>
+		        groups:read
+                    </p>
+		    Bot Token Scopes requied for uploading assets/files to Slack
+		    <br/>
+		    <p class="octoslack_indented">
+	                files:write
+                    </p>
+		    Bot Token Scopes requied for listening for and responding to commands
+		    <br/>
+		    <p class="octoslack_indented">
+		        channels:history
+		        <br/>
+		        groups:history
+		        <br/>
+		        reactions:write
+		        <br/>
+		        users:read
+                    </p>
+                </small>
                 <br/>
 	        <div class="octoprint_config_row">
                     <input type="checkbox" class="octoslack_valign octoslack_checkbox_margin_override" id="octoslack_bot_commands" data-bind="checked: settings.plugins.Octoslack.slack_apitoken_config.enable_commands">
@@ -155,20 +181,14 @@
                 </div>
 	        <div class="octoprint_config_row">
 	            <small class="muted">
-			    The API Token allows for bi-directional communication between client and server meaning this plugin can receive and react to messages.
-			    <br/>
-			    NOTE: An OctoPrint restart is required for the plugin to start listening for commands
-			    <br/>
-			    NOTE: While the plugin will stop responding to commands immediate after this setting is disabled, the connection to Slack will not be torn down until OctoPrint is restarted
-			    <br/>
-			    When enabled, a command can be issued to the plugin via a mention.
+			    When enabled, the plugin will poll your channel(s) looking for bot mentions/issued commands
 			    <br/>
 			    e.g.    @botname status
 			    <br/>
 			    (where @botname must match the bot name configured in Slack and as opposed to the Username configured for this plugin)
 			    <br/>
 	  	    </small>
-		    <br/>
+                    <br/>
                     <table border="1" cellspacing="8" cellpadding="8">
                         <thead>
                         <tr bgcolor="#EEEEEE">
@@ -212,7 +232,20 @@
 	  	    <small class="muted">
                         *Restricted commands can only be executed by one of the configured authorized users. This option is ignored (all commands are accessible) If not authorized users are specified
 	  	    </small>
-		    <br/>
+		    <br/><br/>
+                    <span class="octoslack_label">Alternate bot username</span>
+                    <input type="text" class="octoslack_width_auto" id="octoslack_custom_identity_username" size="25" data-bind="value: settings.plugins.Octoslack.slack_apitoken_config.alternate_bot_username">
+                    <br/>
+	            <small class="muted">
+                            When using the Slack API token, specifying an alternate username here will alow enable listening for and responding to commands issued using this alternate username. In the scenario when multiple Octoslack instances are configured to use the same Slack Bot Access Token, the original bot name can be used to control a single instance while a common alternate name can be used to control all instances.
+                            <br/>
+                            Slack will not highlight this alternate name but Octoslack will still respond accordingly
+			    <br/>
+			    A alternate bot name of <strong>test123</strong> would be accessed via <strong>@test123</strong>
+			    <br/>
+			    e.g.    @test123 status
+                    </small>
+                    <br/><br/>
                     <div class="octoprint_config_row">
                         <span class="octoslack_label">Authorized users</span>
                         <input type="text" class="octoslack_width_auto" size="60" data-bind="value: settings.plugins.Octoslack.slack_rtm_authorized_users">
@@ -252,8 +285,26 @@
                     <span class="octoslack_label">WebHook URL</span>
                     <input type="text" class="octoslack_width_auto" size="60" data-bind="value: settings.plugins.Octoslack.slack_webhook_config.webhook_url">
 		    </br>
-		    <small class="muted">A WebHook URL can be generated via your Slack team's settings dialog. Apps &amp; integrations --&gt; Manage --&gt; Custom Integrations --&gt; Incoming WebHooks</small>
+		    <small class="muted">A Slack WebHook URL can be created via the <strong>Incoming Webhooks</strong> feature of your <a href="https://api.slack.com/apps" target="_blank">Slack App</a></small>. Various scopes/permissions must also be granted to your app for it to function correctly (see below)
                 </div>
+		<small class="muted">
+                    <br/>
+		    Bot Token Scopes requied for posting to a channel
+		    <br/>
+		    <p class="octoslack_indented">
+	                channels:read
+		        <br/>
+		        chat:write
+		        <br/>
+		        groups:read
+                    </p>
+		    Bot Token Scopes requied for uploading assets/files to Slack
+		    <br/>
+		    <p class="octoslack_indented">
+	                files:write
+                    </p>
+                </small>
+                <br/>
             </div>
 	    <div class="octoprint_config_row">
                 <input type="checkbox" class="octoslack_valign octoslack_checkbox_margin_override" id="octoslack_mattermost_compatabilty_mode" onclick="Octoslack.applyMattermostChanges();" data-bind="checked: settings.plugins.Octoslack.mattermost_compatability_mode">
@@ -273,40 +324,72 @@
 	        <small class="muted">
                     A single channel can be specified or multiple channels can provided via a comma-separated list (channel1,channel2,channel3)
 	            <br/>
-                    Optional for WebHooks but required for when using an API Token
+                    Optional for WebHooks but required for when using an Slack Bot Acces Token
                 </small>
             </div>
-            <h3>Slack identity</h3>
-            <div class="octoprint_config_row">
-                <input type="checkbox" id="octoslack_slack_identity_check" onClick="Octoslack.toggleUseSlackIdentity(this);" class="octoslack_valign octoslack_checkbox_margin_override" data-bind="checked: settings.plugins.Octoslack.slack_identity.existing_user">
-                <div class="octoslack_label octoslack_action_label" onclick="$('#octoslack_slack_identity_check').trigger('click')">Use Slack identity</div>
-	        <br/>
-    	        <small class="muted">
-                    When checked, Octoslack will Use the name/icon defined for the Bot/WebHook. When unchecked, a custom name and icon can be specified.
-                    <br/>
-                    When using the Slack API token, specifying an alternate username here will alow enable listening for and responding to commands issued using this alternate username. In the scenario when multiple Octoslack instances are configured to use the same Slack API Token, the original bot name can be used to control a single instance while a common alternate name can be used to control all instances.
-                    <br/>
-                    Slack will not highlight this alternate name but Octoslack will still respond accordingly
-                </small>
-            </div>
-            <div id="octoslack_custom_identity_group" class="octoslack_hidden">
+            <br/>
+            <h3>Classic Slack bot support</h3>
+	    <div class='octoslack_small_config_group'> <!-- Start classic bot config section -->
+	        <div class="octoprint_config_row">
+                    <input type="checkbox" class="octoslack_valign octoslack_checkbox_margin_override" id="octoslack_slack_classic_bot" onchange="Octoslack.applyClassicBotChanges();" data-bind="checked: settings.plugins.Octoslack.slack_apitoken_config.classic_bot">
+                    <div class="octoslack_label octoslack_action_label" onclick="$('#octoslack_slack_classic_bot').trigger('click')">Classic Slack bot</div>
+	            </br>
+	  	    <small class="muted">
+		        Slack has removed some functionality from all newly created apps/bots but for those running older bots (Apps &amp; integrations --&gt; Manage --&gt; Custom Integrations --&gt; Bots), this option will restore the Octoslack configuration options for this funtionality. 
+                        <br/>
+                        <br/>
+		        The following capabilities only available for classic bots when this option is enabled:
+		        <br/>
+		        <p class="octoslack_indented">
+		            <strong>RTM Connectivity</strong> - RTM (Real Time Messaging) utilizes a persistent connection for immediate bidirectional communication with Slack
+			    <br/>
+			    <strong>Alternte bot username</strong> - An override of the bot's username
+			    <br/>
+			    <strong>Alternate bot icon emoji</strong> - An override of the bot's icon
+			    <br/>
+			    <strong>Alternate bot icon URL</strong> - An override of the bot's icon
+                        </p>
+                        NOTE: It should be assumed that Slack will eventually remove this functionality completely. Feel free to use this functionality until until Slack finally removes it.
+	            </small>
+                </div>
                 <br/>
-                <div class="octoprint_config_row">
-                    <span class="octoslack_label">Username</span>
-                    <input type="text" class="octoslack_width_auto" size="25" data-bind="value: settings.plugins.Octoslack.slack_identity.username">
-                    <br/>
+	        <div class="octoprint_config_row">
+                    <input type="checkbox" class="octoslack_valign octoslack_checkbox_margin_override" id="octoslack_slack_force_rtm" data-bind="checked: settings.plugins.Octoslack.slack_apitoken_config.force_rtm">
+                    <div class="octoslack_label octoslack_action_label" onclick="$('#octoslack_slack_force_rtm').trigger('click')">Force RTM</div>
+	            </br>
+ 	            <small class="muted">
+		        Only available for classic Slack bots. All new Slack message retrieval will be made via the Slack Web API (polling) but should this prove an issue, classic bot users have an opportunity to revert back to the old RTM retrieval method (WebSockets) until the issue is resolved.
+	  	    </small>
                 </div>
+                <br/>
+                <h4>Slack identity</h4>
                 <div class="octoprint_config_row">
-                    <span class="octoslack_label">Icon emoji</span>
-                    <input type="text" class="octoslack_width_auto" id="octoslack_custom_identity_icon_emoji" size="15" data-bind="value: settings.plugins.Octoslack.slack_identity.icon_emoji">
-                    <br/>
+                    <input type="checkbox" id="octoslack_slack_identity_check" onClick="Octoslack.toggleUseSlackIdentity(this);" class="octoslack_valign octoslack_checkbox_margin_override" data-bind="checked: settings.plugins.Octoslack.slack_identity.existing_user">
+                    <div class="octoslack_label octoslack_action_label" onclick="$('#octoslack_slack_identity_check').trigger('click')">Use Slack identity</div>
+	            <br/>
+    	            <small class="muted">
+                        When checked, Octoslack will use the name/icon already defined for the Slack bot. When unchecked, a custom name and icon can be specified below.
+                    </small>
                 </div>
-                <div class="octoprint_config_row">
-                    <span class="octoslack_label">Icon URL</span>
-                    <input type="text" class="octoslack_width_auto" size="60" data-bind="value: settings.plugins.Octoslack.slack_identity.icon_url">
+                <div id="octoslack_custom_identity_group">
                     <br/>
+                    <div class="octoprint_config_row">
+                        <span class="octoslack_label">Username</span>
+                        <input type="text" class="octoslack_width_auto" id="octoslack_custom_identity_username" size="25" data-bind="value: settings.plugins.Octoslack.slack_identity.username">
+                        <br/>
+                    </div>
+                    <div class="octoprint_config_row">
+                        <span class="octoslack_label">Icon emoji</span>
+                        <input type="text" class="octoslack_width_auto" id="octoslack_custom_identity_icon_emoji" size="15" data-bind="value: settings.plugins.Octoslack.slack_identity.icon_emoji">
+                        <br/>
+                    </div>
+                    <div class="octoprint_config_row">
+                        <span class="octoslack_label">Icon URL</span>
+                        <input type="text" class="octoslack_width_auto" id="octoslack_custom_identity_icon_url" size="50" data-bind="value: settings.plugins.Octoslack.slack_identity.icon_url">
+                        <br/>
+                    </div>
                 </div>
-            </div>
+            </div> <!-- End classic bot config section -->
         </div>
     </div> <!-- End Slack config section -->
     <div id="octoslack_pushbullet_config_section" class="octoslack_hidden"> <!-- Start Pushbullet config section -->
@@ -505,7 +588,7 @@
             <span class="octoslack_valign octoslack_action_label"
               onclick="$('#octoslackSnapshotUploadMethod_slack').trigger('click')">Slack</span>
            <br/>
-           <small class="muted">Snapshot images will be uploaded directly to Slack as general attachments. It's highly recommended to only use this option when sending messages to a dedicated Slack channel. Snapshots uploaded to Slack directly are not connected to Slack messages and depending on channel activity, may not render immediately after the intended Slack message. It's also worth noting that even with a dedicated channel, if multiple Slack messages are generated within a short period, the aforementioned render location issue may also occur. Requires Slack API Token.</small>
+           <small class="muted">Snapshot images will be uploaded directly to Slack as general attachments. It's highly recommended to only use this option when sending messages to a dedicated Slack channel. Snapshots uploaded to Slack directly are not connected to Slack messages and depending on channel activity, may not render immediately after the intended Slack message. It's also worth noting that even with a dedicated channel, if multiple Slack messages are generated within a short period, the aforementioned render location issue may also occur. Requires Slack Bot Access Token.</small>
         </div>
         <div id="octoslackPushbulletUploadMethod">
             <input type="radio" name="octoslackSnapshotUploadMethod"
