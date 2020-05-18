@@ -844,7 +844,7 @@ var Octoslack = {
 
             if(eventType == "GCODE") {
                 //Color
-	        eventHtml.push("        <div class='octoprint_config_row' octoslack_msg_fallback");
+	        eventHtml.push("        <div class='octoprint_config_row' octoslack_msg_fallback>");
 	        eventHtml.push("            <select class='octoslack_select' id='octoslack_event_" + internalName + "_color'>");
 	        eventHtml.push("                <option value='good'" + (customColor == 'good' ? ' selected' : '') + ">OK</option>");
 	        eventHtml.push("                <option value='warning'" + (customColor == 'warning' ? ' selected' : '') + ">Warning</option>");
