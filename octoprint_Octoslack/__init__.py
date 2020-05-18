@@ -1004,6 +1004,9 @@ class OctoslackPlugin(
 
     event_last_processed = {}  ##event --> timestamp map
 
+    def clear_event_last_processed(self):
+        self.event_last_processed = {}
+
     def handle_event(
         self,
         event,
@@ -1029,6 +1032,7 @@ class OctoslackPlugin(
                 self.slack_cmd_stop_user = None
                 self.slack_cmd_pause_user = None
                 self.slack_cmd_resume_user = None
+                self.clear_event_last_processed()
             elif event == "PrintFailed":
                 self.stop_progress_timer()
                 self._bot_progress_last_req = None
@@ -1037,6 +1041,7 @@ class OctoslackPlugin(
                 self.slack_cmd_stop_user = None
                 self.slack_cmd_pause_user = None
                 self.slack_cmd_resume_user = None
+                self.clear_event_last_processed()
                 ignore_cancel_fail_event = self._settings.get(
                     ["ignore_cancel_fail_event"], merged=True
                 )
@@ -1077,6 +1082,7 @@ class OctoslackPlugin(
                 self.slack_cmd_stop_user = None
                 self.slack_cmd_pause_user = None
                 self.slack_cmd_resume_user = None
+                self.clear_event_last_processed()
             elif event == "ZChange":
                 if self.process_zheight_change(payload):
                     self.handle_event("Progress", None, payload, False, False, None)
@@ -1131,6 +1137,20 @@ class OctoslackPlugin(
             if payload == None:
                 payload = {}
 
+            last_processed_key = event
+            if event == "GcodeEvent":
+                last_processed_key = event + "_" + event_settings["InternalName"]
+
+            last_processed_time = 0
+            if last_processed_key in self.event_last_processed:
+                last_processed_time = self.event_last_processed[last_processed_key]
+
+            min_notification_interval = 0
+            if "MinNotificationInterval" in event_settings:
+                min_notification_interval = int(
+                    event_settings["MinNotificationInterval"]
+                )
+
             self._logger.debug(
                 "Event: "
                 + event
@@ -1138,34 +1158,62 @@ class OctoslackPlugin(
                 + str(notification_enabled)
                 + ", CommandEnabled: "
                 + str(command_enabled)
+                + ", OverrideNotificationEnabledCheck: "
+                + str(override_notification_enabled_check)
+                + ", LastProcessedKey: "
+                + str(last_processed_key)
+                + ", LastProcessedTime: "
+                + str(last_processed_time)
+                + ", MinNotificationInterval: "
+                + str(min_notification_interval)
                 + ", Payload: "
                 + str(payload)
             )
 
-            last_processed_key = event
-            if event == "GcodeEvent":
-                last_processed_key = event + "_" + event_settings["InternalName"]
-
             if (
-                "MinNotificationInterval" in event_settings
-                and last_processed_key in self.event_last_processed
+                min_notification_interval > 0
+                and last_processed_time > 0
                 and not override_notification_enabled_check
             ):
-                min_notification_interval = int(
-                    event_settings["MinNotificationInterval"]
-                )
-                if min_notification_interval > 0:
-                    prev_timestamp = self.event_last_processed[last_processed_key]
-                    now = time.time()
-                    if now < (prev_timestamp + (min_notification_interval * 60)):
-                        self._logger.debug(
-                            "Ignoring "
-                            + event
-                            + " event to satisfy min notification interval"
-                        )
-                        return
+                now = time.time()
 
-            self.event_last_processed[last_processed_key] = time.time()
+                next_process_time = last_processed_time + (
+                    min_notification_interval * 60
+                )
+
+                self._logger.debug(
+                    "Evaluating min notification interval - Event: "
+                    + event
+                    + ", LastProcessedKey: "
+                    + str(last_processed_key)
+                    + ", MinNotificationInterval: "
+                    + str(min_notification_interval)
+                    + ", LastProcessedTime: "
+                    + str(last_processed_time)
+                    + ", NextProcessTime: "
+                    + str(next_process_time)
+                    + ", Now: "
+                    + str(now)
+                )
+
+                if now < next_process_time:
+                    self._logger.debug(
+                        "Ignoring "
+                        + event
+                        + " event to satisfy min notification interval"
+                    )
+                    return
+
+            new_last_processed_time = time.time()
+            self.event_last_processed[last_processed_key] = new_last_processed_time
+            self._logger.debug(
+                "Updating Event last processed time: "
+                + event
+                + ", LastProcessedKey: "
+                + str(last_processed_key)
+                + ", NewLastProcessedTime: "
+                + str(new_last_processed_time)
+            )
 
             self.process_slack_event(
                 event,
