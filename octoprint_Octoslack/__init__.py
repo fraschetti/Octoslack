@@ -781,7 +781,7 @@ class OctoslackPlugin(
     def on_shutdown(self):
         self.stop_bot_listener()
 
-        self._logger.debug("Stopped Slack RTM client")
+        self._logger.debug("Stopped Slack bot client")
 
         self.stop_progress_timer()
         self.stop_heartbeat_timer()
@@ -1556,6 +1556,7 @@ class OctoslackPlugin(
             printer_temps = self._printer.get_current_temperatures()
 
             temp_str = ""
+            nozzle_temps = []
             if not printer_temps == None and "bed" in printer_temps:
                 temp_str = ""
                 for key in printer_temps:
@@ -1585,21 +1586,37 @@ class OctoslackPlugin(
                                 )
                             )
                         else:
+                            nozzle_name += key[4:]
 
-                            if len(printer_temps) > 2:
-                                nozzle_name += key[4:]
-
-                            temp_str += (
-                                ", "
-                                + nozzle_name
-                                + ": "
-                                + str(printer_temps[key]["actual"])
-                                + unichr(176)
-                                + "C/"
-                                + str(printer_temps[key]["target"])
-                                + unichr(176)
-                                + "C"
+                            nozzle_temps.append(
+                                (
+                                    nozzle_name,
+                                    printer_temps[key]["actual"],
+                                    printer_temps[key]["target"],
+                                )
                             )
+
+            for nozzle_temp in nozzle_temps:
+                if len(temp_str) > 0:
+                    temp_str += ", "
+
+                nozzle_name = nozzle_temp[0]
+                actual_temp = nozzle_temp[1]
+                target_temp = nozzle_temp[2]
+
+                if len(nozzle_temps) == 1:
+                    nozzle_name = "Nozzle"
+
+                temp_str += (
+                    nozzle_name
+                    + ": "
+                    + str(actual_temp)
+                    + unichr(176)
+                    + "C/"
+                    + str(target_temp)
+                    + unichr(176)
+                    + "C"
+                )
 
             footer = "Printer: " + printer_text + temp_str + z_height_str
 
@@ -2504,44 +2521,53 @@ class OctoslackPlugin(
                         message = messages[i]
                         i -= 1
 
-                        if not "ts" in message or not "user" in message:
-                            continue
+                        try:
+                            if not "ts" in message or not "user" in message:
+                                continue
 
-                        msg_user = message["user"]
-                        msg_ts = message["ts"]
-                        self.last_conversations_ts[conversation_id] = msg_ts
+                            msg_user = message["user"]
+                            msg_ts = message["ts"]
+                            self.last_conversations_ts[conversation_id] = msg_ts
 
-                        if not "type" in message:
-                            continue
+                            if not "type" in message:
+                                continue
 
-                        msg_type = message["type"]
-                        if not msg_type == "message":
-                            continue
+                            msg_type = message["type"]
+                            if not msg_type == "message":
+                                continue
 
-                        msg_text = message["text"]
+                            msg_text = message["text"]
 
-                        if limit == 1:
-                            # Only need the latest ts
-                            continue
+                            if limit == 1:
+                                # Only need the latest ts
+                                continue
 
-                        if len(msg_text.strip()) == 0:
-                            continue
+                            if len(msg_text.strip()) == 0:
+                                continue
 
-                        self._logger.debug(
-                            "Received Slack Web API Message - Text: "
-                            + msg_text
-                            + ", User: "
-                            + msg_user
-                            + ", Channel: "
-                            + channel
-                            + ", ConversationID: "
-                            + conversation_id
-                            + ", TS: "
-                            + str(msg_ts)
-                        )
-                        self.process_rtm_message(
-                            slackAPIToken, msg_text, msg_user, conversation_id, msg_ts
-                        )
+                            self._logger.debug(
+                                "Received Slack Web API Message - Text: "
+                                + msg_text
+                                + ", User: "
+                                + msg_user
+                                + ", Channel: "
+                                + channel
+                                + ", ConversationID: "
+                                + conversation_id
+                                + ", TS: "
+                                + str(msg_ts)
+                            )
+                            self.process_rtm_message(
+                                slackAPIToken,
+                                msg_text,
+                                msg_user,
+                                conversation_id,
+                                msg_ts,
+                            )
+                        except Exception as e:
+                            self._logger.exception(
+                                "Slack Web API - Error processing message: " + str(e)
+                            )
         except Exception as e:
             error_msg = str(e)
             if (
@@ -2554,9 +2580,21 @@ class OctoslackPlugin(
                 )
                 del self.last_conversations_ts[conversation_id]
 
-            self._logger.exception(
-                "Slack Web API - Error querying channel history: " + error_msg
-            )
+            error_msg_lower = error_msg.lower()
+            ##Ignore blips that we'll recover from on the next iteration
+            if (
+                "connection aborted" in error_msg_lower
+                or "error(107," in error_msg_lower
+                or "badstatusline" in error_msg_lower
+            ):
+                self._logger.debug(
+                    "Slack Web API - Error (that we'll ignore) querying channel history: "
+                    + error_msg
+                )
+            else:
+                self._logger.exception(
+                    "Slack Web API - Error querying channel history: " + error_msg
+                )
 
     def refresh_bot_conversations(self, slackAPIToken):
         try:
@@ -2619,7 +2657,22 @@ class OctoslackPlugin(
             self.bot_channels = new_channels
             self.last_conversations_ts = new_last_conversations_ts
         except Exception as e:
-            self._logger.exception("Error refreshing bot conversations list: " + str(e))
+            error_msg = str(e)
+            error_msg_lower = error_msg.lower()
+            ##Ignore blips that we'll recover from on the next iteration
+            if (
+                "connection aborted" in error_msg_lower
+                or "error(107," in error_msg_lower
+                or "badstatusline" in error_msg_lower
+            ):
+                self._logger.debug(
+                    "Error (that we'll ignore) refreshing bot conversations list: "
+                    + error_msg
+                )
+            else:
+                self._logger.exception(
+                    "Error refreshing bot conversations list: " + error_msg
+                )
 
     slack_cmd_stop_user = None
     slack_cmd_pause_user = None
@@ -2931,7 +2984,7 @@ class OctoslackPlugin(
             slackAPIConnection = Slacker(slackAPIToken, timeout=SLACKER_TIMEOUT)
 
             self._logger.debug(
-                "Sending Slack RTM reaction - Channel: "
+                "Sending Slack reaction - Channel: "
                 + channel
                 + ", Timestamp: "
                 + timestamp
@@ -2952,7 +3005,7 @@ class OctoslackPlugin(
 
             if reaction_rsp.successful == None or reaction_rsp.successful == False:
                 self._logger.debug(
-                    "Slack RTM send reaction failed - Channel: "
+                    "Slack send reaction failed - Channel: "
                     + channel
                     + ", Timestamp: "
                     + timestamp
@@ -2964,7 +3017,7 @@ class OctoslackPlugin(
                 )
             else:
                 self._logger.debug(
-                    "Successfully sent Slack RTM reaction - Channel: "
+                    "Successfully sent Slack reaction - Channel: "
                     + channel
                     + ", Timestamp: "
                     + timestamp
@@ -2975,7 +3028,7 @@ class OctoslackPlugin(
                 )
         except Exception as e:
             self._logger.exception(
-                "Error sending Slack RTM reaction - Channel: "
+                "Error sending Slack reaction - Channel: "
                 + channel
                 + ", Timestamp: "
                 + timestamp
@@ -3791,7 +3844,7 @@ class OctoslackPlugin(
                             slackAPIToken, timeout=SLACKER_TIMEOUT
                         )
 
-                        ##Applies to both standard Progress events as well as '@bot status' Slack RTM commands
+                        ##Applies to both standard Progress events as well as '@bot status' Slack commands
                         if event == "Progress":
                             if (
                                 self._bot_progress_last_req
