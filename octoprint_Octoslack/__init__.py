@@ -5807,12 +5807,7 @@ class OctoslackPlugin(
                         + str(command_enabled)
                     )
                     self.handle_event(
-                        "GcodeEvent",
-                        None,
-                        {"cmd": line},
-                        notification_enabled,
-                        command_enabled,
-                        gcode_event,
+                        "GcodeEvent", None, {"cmd": line}, False, False, gcode_event
                     )
         except Exception as e:
             if hasattr(e, "message"):
