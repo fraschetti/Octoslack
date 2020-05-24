@@ -2613,6 +2613,12 @@ class OctoslackPlugin(
                     "Slack Web API - Error querying channel history: " + error_msg
                 )
 
+            if "missing_scope" in error_msg:
+                self._logger.warn(
+                    "Sleeping for 30 seconds due to missing scope. Please see the Octoslack settings dialog for the list of required scopes"
+                )
+                time.sleep(30)
+
     def refresh_bot_conversations(self, slackAPIToken):
         try:
             # self._logger.debug("Slack Web API - Updating bot conversations list...")
@@ -2690,6 +2696,12 @@ class OctoslackPlugin(
                 self._logger.exception(
                     "Error refreshing bot conversations list: " + error_msg
                 )
+
+            if "missing_scope" in error_msg:
+                self._logger.warn(
+                    "Sleeping for 30 seconds due to missing scope. Please see the Octoslack settings dialog for the list of required scopes"
+                )
+                time.sleep(30)
 
     slack_cmd_stop_user = None
     slack_cmd_pause_user = None
