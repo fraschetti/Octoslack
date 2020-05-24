@@ -87,6 +87,7 @@ class OctoslackPlugin(
                 "api_token": "",
                 "classic_bot": False,
                 "force_rtm": False,
+                "messages_query_delay": 1.2,
                 "alternate_bot_username": "",
                 "enable_commands": True,
                 "commands_positive_reaction": ":thumbsup:",
@@ -2405,7 +2406,7 @@ class OctoslackPlugin(
                 for channel in self.bot_channels:
                     self.retrieve_channel_history(slackAPIToken, channel)
 
-                    delay = 1.2
+                    delay = self.get_messages_query_delay()
                     # self._logger.debug(
                     #    "Slack Web API sleeping for " + str(delay) + "secs"
                     # )
@@ -2417,6 +2418,22 @@ class OctoslackPlugin(
                 "Error in Slack Web API event loop, Error: " + str(e)
             )
         self.web_api_running = False
+
+    def get_messages_query_delay(self):
+        minimum = 1.2
+
+        try:
+            delay = float(
+                self._settings.get(["slack_apitoken_config"], merged=True).get(
+                    "messages_query_delay"
+                )
+            )
+            if delay >= minimum:
+                return delay
+        except:
+            pass
+
+        return minimum
 
     def retrieve_channel_history(self, slackAPIToken, channel):
         conversation_id = None
