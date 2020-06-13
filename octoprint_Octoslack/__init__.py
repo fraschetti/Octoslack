@@ -4240,6 +4240,7 @@ class OctoslackPlugin(
                         ##def send_message(self, message, room_id, **kwargs):
                         ##def upload_file(self, room_id, description, file, message, mime_type='text/plain', **kwargs):
 
+						rc_room_id = None
                         if channel[0] == "#":
                             public_channels = rc.get_public_rooms()
                             for public_channel in public_channels:
