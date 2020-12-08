@@ -90,10 +90,10 @@ class OctoslackPlugin(
                 "messages_query_delay": 1.2,
                 "alternate_bot_username": "",
                 "enable_commands": True,
-                "commands_positive_reaction": ":thumbsup:",
-                "commands_negative_reaction": ":thumbsdown:",
-                "commands_processing_reaction": ":stopwatch:",
-                "commands_unauthorized_reaction": ":lock:",
+                "commands_positive_reaction": "👍",
+                "commands_negative_reaction": "👎",
+                "commands_processing_reaction": "⏱️",
+                "commands_unauthorized_reaction": "🔒",
             },
             "slack_webhook_config": {"webhook_url": ""},
             "slack_identity": {
@@ -163,7 +163,7 @@ class OctoslackPlugin(
                 "Help": {
                     "Enabled": True,
                     "ChannelOverride": "",
-                    "Message": ":heavy_minus_sign: Help - Supported commands :question:",
+                    "Message": "➖ Help - Supported commands ❓",
                     "Fallback": "",
                     "Color": "good",
                     "CaptureSnapshot": False,
@@ -186,7 +186,7 @@ class OctoslackPlugin(
                 "Startup": {
                     "Enabled": False,
                     "ChannelOverride": "",
-                    "Message": ":heavy_minus_sign:  Octoprint service started :chart_with_upwards_trend:",
+                    "Message": "➖  Octoprint service started 📈",
                     "Fallback": "Octoprint service started",
                     "Color": "good",
                     "CaptureSnapshot": False,
@@ -208,7 +208,7 @@ class OctoslackPlugin(
                 "Shutdown": {
                     "Enabled": False,
                     "ChannelOverride": "",
-                    "Message": ":heavy_minus_sign:  Octoprint service stopped :chart_with_downwards_trend:",
+                    "Message": "➖  Octoprint service stopped 📉",
                     "Fallback": "Octoprint service stopped",
                     "Color": "good",
                     "CaptureSnapshot": False,
@@ -230,7 +230,7 @@ class OctoslackPlugin(
                 "Connecting": {
                     "Enabled": False,
                     "ChannelOverride": "",
-                    "Message": ":heavy_minus_sign:  Connecting to printer :satellite:",
+                    "Message": "➖  Connecting to printer 🛰️",
                     "Fallback": "Connecting to printer",
                     "Color": "good",
                     "CaptureSnapshot": False,
@@ -252,7 +252,7 @@ class OctoslackPlugin(
                 "Connected": {
                     "Enabled": False,
                     "ChannelOverride": "",
-                    "Message": ":heavy_minus_sign:  Successfully connected to printer :computer:",
+                    "Message": "➖  Successfully connected to printer 🖥️",
                     "Fallback": "Successfully connected to printer",
                     "Color": "good",
                     "CaptureSnapshot": False,
@@ -274,7 +274,7 @@ class OctoslackPlugin(
                 "Disconnecting": {
                     "Enabled": False,
                     "ChannelOverride": "",
-                    "Message": ":heavy_minus_sign:  Printer disconnecting :confused:",
+                    "Message": "➖  Printer disconnecting 😕",
                     "Fallback": "Printer disconnecting",
                     "Color": "warning",
                     "CaptureSnapshot": False,
@@ -296,7 +296,7 @@ class OctoslackPlugin(
                 "Disconnected": {
                     "Enabled": False,
                     "ChannelOverride": "",
-                    "Message": ":heavy_minus_sign:  Printer disconnected :worried:",
+                    "Message": "➖  Printer disconnected 😟",
                     "Fallback": "Printer disconnected",
                     "Color": "danger",
                     "CaptureSnapshot": False,
@@ -318,7 +318,7 @@ class OctoslackPlugin(
                 "Error": {
                     "Enabled": True,
                     "ChannelOverride": "",
-                    "Message": ":heavy_minus_sign:  Printer error :fire:",
+                    "Message": "➖  Printer error 🔥",
                     "Fallback": "Printer error: {error}",
                     "Color": "danger",
                     "CaptureSnapshot": True,
@@ -340,7 +340,7 @@ class OctoslackPlugin(
                 "PrintStarted": {
                     "Enabled": True,
                     "ChannelOverride": "",
-                    "Message": ":heavy_minus_sign:  A new print has started :rocket:",
+                    "Message": "➖  A new print has started 🚀",
                     "Fallback": "Print started: {print_name}, Estimate: {remaining_time}",
                     "Color": "good",
                     "CaptureSnapshot": True,
@@ -362,7 +362,7 @@ class OctoslackPlugin(
                 "PrintFailed": {
                     "Enabled": True,
                     "ChannelOverride": "",
-                    "Message": ":heavy_minus_sign:  Print failed :bomb:",
+                    "Message": "➖  Print failed 💣",
                     "Fallback": "Print failed: {print_name}",
                     "Color": "danger",
                     "CaptureSnapshot": True,
@@ -384,7 +384,7 @@ class OctoslackPlugin(
                 "PrintCancelling": {
                     "Enabled": True,
                     "ChannelOverride": "",
-                    "Message": ":heavy_minus_sign:  Print is being cancelled :no_good:",
+                    "Message": "➖  Print is being cancelled 🙅",
                     "Fallback": "Print is being cancelled: {print_name}",
                     "Color": "warning",
                     "CaptureSnapshot": True,
@@ -406,7 +406,7 @@ class OctoslackPlugin(
                 "PrintCancelled": {
                     "Enabled": True,
                     "ChannelOverride": "",
-                    "Message": ":heavy_minus_sign:  Print cancelled :no_good:",
+                    "Message": "➖  Print cancelled 🙅",
                     "Fallback": "Print cancelled: {print_name}",
                     "Color": "warning",
                     "CaptureSnapshot": True,
@@ -428,7 +428,7 @@ class OctoslackPlugin(
                 "PrintDone": {
                     "Enabled": True,
                     "ChannelOverride": "",
-                    "Message": ":heavy_minus_sign:  Print finished successfully :dancer:",
+                    "Message": "➖  Print finished successfully 💃",
                     "Fallback": "Print finished successfully: {print_name}, Time: {elapsed_time}",
                     "Color": "good",
                     "CaptureSnapshot": True,
@@ -451,7 +451,7 @@ class OctoslackPlugin(
                 "Progress": {
                     "Enabled": False,
                     "ChannelOverride": "",
-                    "Message": ":heavy_minus_sign: Print progress {pct_complete} :horse_racing:",
+                    "Message": "➖ Print progress {pct_complete} 🏇",
                     "Fallback": "Print progress: {pct_complete} - {print_name}, Elapsed: {elapsed_time}, Remaining: {remaining_time}",
                     "Color": "good",
                     "CaptureSnapshot": True,
@@ -501,7 +501,7 @@ class OctoslackPlugin(
                 "Heartbeat": {
                     "Enabled": False,
                     "ChannelOverride": "",
-                    "Message": ":heavy_minus_sign: Heartbeat - Printer status: {printer_status} :heartbeat:",
+                    "Message": "➖ Heartbeat - Printer status: {printer_status} 💓",
                     "Fallback": "Heartbeat - Printer status: {printer_status}",
                     "Color": "good",  ##Color may be updated in process_slack_event
                     "CaptureSnapshot": False,
@@ -523,7 +523,7 @@ class OctoslackPlugin(
                 "PrintPaused": {
                     "Enabled": True,
                     "ChannelOverride": "",
-                    "Message": ":heavy_minus_sign:  Print paused :zzz:",
+                    "Message": "➖  Print paused 💤",
                     "Fallback": "Print paused: {pct_complete} - {print_name}",
                     "Color": "warning",
                     "CaptureSnapshot": True,
@@ -544,7 +544,7 @@ class OctoslackPlugin(
                 "PrintResumed": {
                     "Enabled": True,
                     "ChannelOverride": "",
-                    "Message": ":heavy_minus_sign:  Print resumed :runner:",
+                    "Message": "➖  Print resumed 🏃",
                     "Fallback": "Print resumed: {pct_complete} - {print_name}",
                     "Color": "good",
                     "CaptureSnapshot": True,
@@ -565,7 +565,7 @@ class OctoslackPlugin(
                 "MetadataAnalysisStarted": {
                     "Enabled": False,
                     "ChannelOverride": "",
-                    "Message": ":heavy_minus_sign:  File analysis started :runner:",
+                    "Message": "➖  File analysis started 🏃",
                     "Fallback": "File metadata analysis started: {print_name}",
                     "Color": "good",
                     "CaptureSnapshot": False,
@@ -586,7 +586,7 @@ class OctoslackPlugin(
                 "MetadataAnalysisFinished": {
                     "Enabled": False,
                     "ChannelOverride": "",
-                    "Message": ":heavy_minus_sign:  File analysis complete :ok_hand:",
+                    "Message": "➖  File analysis complete 👌",
                     "Fallback": "File metadata analysis complete: {print_name}",
                     "Color": "good",
                     "CaptureSnapshot": False,
@@ -607,7 +607,7 @@ class OctoslackPlugin(
                 "MovieRendering": {
                     "Enabled": False,
                     "ChannelOverride": "",
-                    "Message": ":heavy_minus_sign:  Timelapse movie rendering :clapper:",
+                    "Message": "➖  Timelapse movie rendering 🎬",
                     "Fallback": "Timelapse movie rendering: {print_name}",
                     "Color": "good",
                     "CaptureSnapshot": False,
@@ -628,7 +628,7 @@ class OctoslackPlugin(
                 "MovieDone": {
                     "Enabled": False,
                     "ChannelOverride": "",
-                    "Message": ":heavy_minus_sign:  Timelapse movie rendering complete :movie_camera:",
+                    "Message": "➖  Timelapse movie rendering complete 🎥",
                     "Fallback": "Timelapse movie rendering complete: {print_name}",
                     "Color": "good",
                     "CaptureSnapshot": False,
@@ -651,7 +651,7 @@ class OctoslackPlugin(
                 "MovieFailed": {
                     "Enabled": False,
                     "ChannelOverride": "",
-                    "Message": ":heavy_minus_sign:  Timelapse movie rendering failed :boom:",
+                    "Message": "➖  Timelapse movie rendering failed 💥",
                     "Fallback": "Timelapse movie rendering failed: {print_name}, Error: {error}",
                     "Color": "danger",
                     "CaptureSnapshot": False,
