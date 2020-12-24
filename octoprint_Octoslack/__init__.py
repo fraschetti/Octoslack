@@ -3458,12 +3458,18 @@ class OctoslackPlugin(
                                 )
                             else:
                                 apiRsp = slackAPIConnection.chat.post_message(
-                                    channel, text="", attachments=attachments_json
+                                    channel,
+                                    as_user=True,
+                                    text="",
+                                    attachments=attachments_json,
                                 )
                                 self._bot_progress_last_req = apiRsp
                         else:
                             apiRsp = slackAPIConnection.chat.post_message(
-                                channel, text="", attachments=attachments_json
+                                channel,
+                                as_user=True,
+                                text="",
+                                attachments=attachments_json,
                             )
                         self._logger.debug(
                             "Slack API message send response: " + apiRsp.raw
