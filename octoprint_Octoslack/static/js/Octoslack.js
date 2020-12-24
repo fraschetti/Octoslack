@@ -42,8 +42,6 @@ var Octoslack = {
         this.setInitialInputStates();
         this.buildSnapshotURLsTable();
         this.buildGcodeEventsTable();
-	this.applyMattermostChanges();
-	this.applyClassicBotChanges();
 	this.populateTimezones();
 
         this.changeImgurClientID();
@@ -60,9 +58,6 @@ var Octoslack = {
 	connection_radio.attr('checked', 'checked');
         connection_radio.trigger('click');
 
-	var slack_identity_check= $("#octoslack_slack_identity_check")[0];
-	this.toggleUseSlackIdentity(slack_identity_check);
-
 	var upload_method = $("#octoslack_upload_method_hidden").val();
 
 	if(upload_method !== undefined && upload_method.length > 0) {
@@ -76,33 +71,6 @@ var Octoslack = {
 	    s3_retention.val("60");
 	    s3_retention.trigger('change');
         }
-    },
-
-    applyMattermostChanges : function() {
-	var connection_method = $("#octoslack_connection_method_hidden").val();
-        var mattermost_enabled = $("#octoslack_mattermost_compatabilty_mode").is(":checked");
-
-	if(connection_method === "WEBHOOK" && mattermost_enabled) {
-		$('#octoslack_custom_identity_icon_emoji').attr('disabled', 'disabled');
-	} else {
-		$('#octoslack_custom_identity_icon_emoji').removeAttr('disabled');
-	}
-    },
-
-    applyClassicBotChanges : function() {
-        var classic_bot_enabled = $("#octoslack_slack_classic_bot").is(":checked");
-
-	if(classic_bot_enabled) {
-		$('#octoslack_slack_force_rtm').removeAttr('disabled');
-	        $('#octoslack_slack_identity_check').removeAttr('disabled');
-	} else {
-                $('#octoslack_slack_force_rtm').prop('checked', false);
-                $('#octoslack_slack_identity_check').prop('checked', true);
-		$('#octoslack_slack_force_rtm').attr('disabled', 'disabled');
-		$('#octoslack_slack_identity_check').attr('disabled', 'disabled');
-	}
-
-	this.toggleUseSlackIdentity();
     },
 
     applySlackUploadChanges : function() {
@@ -299,26 +267,6 @@ var Octoslack = {
 	$( "div[octoslack_msg_channel_override]" ).each(function() {
 	    $(this).attr("class", allow_channel_override_attr ? "octoprint_config_row octoslack_visible" : "octoprint_config_row octoslack_hidden");
 	});
-
-	this.applyMattermostChanges();
-	this.applyClassicBotChanges();
-    },
-
-    toggleUseSlackIdentity : function(checkbox) {
-        if(checkbox === undefined)
-	    checkbox = $("#octoslack_slack_identity_check")[0];
-
-        var checked = checkbox.checked;
-
-        if(checked) {
-            $('#octoslack_custom_identity_username').attr('disabled', 'disabled');
-            $('#octoslack_custom_identity_icon_emoji').attr('disabled', 'disabled');
-            $('#octoslack_custom_identity_icon_url').attr('disabled', 'disabled');
-        } else {
-	    $('#octoslack_custom_identity_username').removeAttr('disabled');
-	    $('#octoslack_custom_identity_icon_emoji').removeAttr('disabled');
-	    $('#octoslack_custom_identity_icon_url').removeAttr('disabled');
-        }
     },
 
     changeSnapshotUploadMethod : function(selection) {

@@ -55,8 +55,7 @@ plugin_requires = [
 ]
 
 if sys.version[0] == "2":
-    plugin_requires.append("websocket-client<0.55.0")
-    plugin_requires.append("slackclient<2.0.0")
+    plugin_requires.append("slackclient==1.3.0")
     plugin_requires.append("minio<7.0.0")
     plugin_requires.append("Pillow<7.0.0")
     plugin_requires.append("humanize<=1.0.0")

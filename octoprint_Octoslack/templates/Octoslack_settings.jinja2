@@ -327,69 +327,6 @@
                     Optional for WebHooks but required for when using an Slack Bot Acces Token
                 </small>
             </div>
-            <br/>
-            <h3>Classic Slack bot support</h3>
-	    <div class='octoslack_small_config_group'> <!-- Start classic bot config section -->
-	        <div class="octoprint_config_row">
-                    <input type="checkbox" class="octoslack_valign octoslack_checkbox_margin_override" id="octoslack_slack_classic_bot" onchange="Octoslack.applyClassicBotChanges();" data-bind="checked: settings.plugins.Octoslack.slack_apitoken_config.classic_bot">
-                    <div class="octoslack_label octoslack_action_label" onclick="$('#octoslack_slack_classic_bot').trigger('click')">Classic Slack bot</div>
-	            </br>
-	  	    <small class="muted">
-		        Slack has removed some functionality from all newly created apps/bots but for those running older bots (Apps &amp; integrations --&gt; Manage --&gt; Custom Integrations --&gt; Bots), this option will restore the Octoslack configuration options for this funtionality. 
-                        <br/>
-                        <br/>
-		        The following capabilities only available for classic bots when this option is enabled:
-		        <br/>
-		        <p class="octoslack_indented">
-		            <strong>RTM Connectivity</strong> - RTM (Real Time Messaging) utilizes a persistent connection for immediate bidirectional communication with Slack
-			    <br/>
-			    <strong>Alternte bot username</strong> - An override of the bot's username
-			    <br/>
-			    <strong>Alternate bot icon emoji</strong> - An override of the bot's icon
-			    <br/>
-			    <strong>Alternate bot icon URL</strong> - An override of the bot's icon
-                        </p>
-                        NOTE: It should be assumed that Slack will eventually remove this functionality completely. Feel free to use this functionality until until Slack finally removes it.
-	            </small>
-                </div>
-                <br/>
-	        <div class="octoprint_config_row">
-                    <input type="checkbox" class="octoslack_valign octoslack_checkbox_margin_override" id="octoslack_slack_force_rtm" data-bind="checked: settings.plugins.Octoslack.slack_apitoken_config.force_rtm">
-                    <div class="octoslack_label octoslack_action_label" onclick="$('#octoslack_slack_force_rtm').trigger('click')">Force RTM</div>
-	            </br>
- 	            <small class="muted">
-		        Only available for classic Slack bots. All new Slack message retrieval will be made via the Slack Web API (polling) but should this prove an issue, classic bot users have an opportunity to revert back to the old RTM retrieval method (WebSockets) until the issue is resolved.
-	  	    </small>
-                </div>
-                <br/>
-                <h4>Slack identity</h4>
-                <div class="octoprint_config_row">
-                    <input type="checkbox" id="octoslack_slack_identity_check" onClick="Octoslack.toggleUseSlackIdentity(this);" class="octoslack_valign octoslack_checkbox_margin_override" data-bind="checked: settings.plugins.Octoslack.slack_identity.existing_user">
-                    <div class="octoslack_label octoslack_action_label" onclick="$('#octoslack_slack_identity_check').trigger('click')">Use Slack identity</div>
-	            <br/>
-    	            <small class="muted">
-                        When checked, Octoslack will use the name/icon already defined for the Slack bot. When unchecked, a custom name and icon can be specified below.
-                    </small>
-                </div>
-                <div id="octoslack_custom_identity_group">
-                    <br/>
-                    <div class="octoprint_config_row">
-                        <span class="octoslack_label">Username</span>
-                        <input type="text" class="octoslack_width_auto" id="octoslack_custom_identity_username" size="25" data-bind="value: settings.plugins.Octoslack.slack_identity.username">
-                        <br/>
-                    </div>
-                    <div class="octoprint_config_row">
-                        <span class="octoslack_label">Icon emoji</span>
-                        <input type="text" class="octoslack_width_auto" id="octoslack_custom_identity_icon_emoji" size="15" data-bind="value: settings.plugins.Octoslack.slack_identity.icon_emoji">
-                        <br/>
-                    </div>
-                    <div class="octoprint_config_row">
-                        <span class="octoslack_label">Icon URL</span>
-                        <input type="text" class="octoslack_width_auto" id="octoslack_custom_identity_icon_url" size="50" data-bind="value: settings.plugins.Octoslack.slack_identity.icon_url">
-                        <br/>
-                    </div>
-                </div>
-            </div> <!-- End classic bot config section -->
         </div>
     </div> <!-- End Slack config section -->
     <div id="octoslack_pushbullet_config_section" class="octoslack_hidden"> <!-- Start Pushbullet config section -->

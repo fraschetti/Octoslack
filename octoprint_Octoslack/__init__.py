@@ -14,7 +14,6 @@ from matrix_client.client import MatrixClient
 from matrix_client.client import Room as MatrixRoom
 from PIL import Image
 from octoprint.util import RepeatedTimer
-from websocket import WebSocketConnectionClosedException
 from minio import Minio
 from sarge import run, Capture, shell_quote
 from discord_webhook import DiscordWebhook, DiscordEmbed
@@ -85,9 +84,7 @@ class OctoslackPlugin(
             "connection_method": "APITOKEN",
             "slack_apitoken_config": {
                 "api_token": "",
-                "classic_bot": False,
-                "force_rtm": False,
-                "messages_query_delay": 1.2,
+                "messages_query_delay": 5,
                 "alternate_bot_username": "",
                 "enable_commands": True,
                 "commands_positive_reaction": ":thumbsup:",
@@ -96,12 +93,6 @@ class OctoslackPlugin(
                 "commands_unauthorized_reaction": ":lock:",
             },
             "slack_webhook_config": {"webhook_url": ""},
-            "slack_identity": {
-                "existing_user": True,
-                "icon_url": "",
-                "icon_emoji": "",
-                "username": "",
-            },
             "slack_rtm_enabled_commands": {
                 "help": {"enabled": True, "restricted": False},
                 "status": {"enabled": True, "restricted": False},
@@ -1920,101 +1911,15 @@ class OctoslackPlugin(
         return "Fqdn detection error"
 
     def start_bot_listener(self):
-        if self.use_slack_web_api():
-            self._logger.debug("Entering Slack Web API client init logic")
-            t = threading.Thread(target=self.start_web_api_client, args=())
-            self._logger.debug("Exited Slack Web API client init logic")
-        else:
-            self._logger.debug("Entering Slack RTM client init logic")
-            t = threading.Thread(target=self.start_rtm_client, args=())
-            self._logger.debug("Exited Slack RTM client init logic")
+        self._logger.debug("Entering Slack Web API client init logic")
+        t = threading.Thread(target=self.start_web_api_client, args=())
+        self._logger.debug("Exited Slack Web API client init logic")
 
         t.daemon = True
         t.start()
 
     def stop_bot_listener(self):
-        self.stop_rtm_client()
         self.stop_web_api_client()
-
-    slack_rtm_v2 = None
-    slack_rtm_v2_registered = False
-
-    def use_slack_web_api(self):
-        classic_bot = self._settings.get(["slack_apitoken_config"], merged=True).get(
-            "classic_bot"
-        )
-        force_rtm = self._settings.get(["slack_apitoken_config"], merged=True).get(
-            "force_rtm"
-        )
-
-        return not classic_bot or not force_rtm
-
-    def start_rtm_client(self):
-        self.stop_rtm_client()
-
-        if not self._settings.get(["slack_apitoken_config"], merged=True).get(
-            "enable_commands"
-        ):
-            return
-
-        connection_method = self.connection_method()
-        if connection_method == None or connection_method != "APITOKEN":
-            self._logger.debug("Slack RTM client not enabled")
-            return
-
-        slackAPIToken = self._settings.get(["slack_apitoken_config"], merged=True).get(
-            "api_token"
-        )
-        if not slackAPIToken:
-            self._logger.warn(
-                "Cannot enable real time messaging client for responding to commands without an API Key"
-            )
-            return
-
-        slackAPIToken = slackAPIToken.strip()
-
-        self._logger.debug("Before Slack RTM client start")
-
-        self.rtm_keep_running = True
-        self.slack_rtm_v2 = None
-        self.bot_user_id = None
-
-        try:
-            # Python2
-            type(SlackClient)
-            t = threading.Thread(target=self.execute_rtm_loop_v1, args=(slackAPIToken,))
-        except NameError:
-            if not self.slack_rtm_v2_registered:
-                self.slack_rtm_v2_registered = True
-
-                dec_func = slack.RTMClient.run_on(event="open")
-                dec_func(self.process_rtm_v2_message)
-
-                dec_func = slack.RTMClient.run_on(event="close")
-                dec_func(self.process_rtm_v2_message)
-
-                dec_func = slack.RTMClient.run_on(event="message")
-                dec_func(self.process_rtm_v2_message)
-
-            # Python3
-            t = threading.Thread(target=self.execute_rtm_loop_v2, args=(slackAPIToken,))
-
-        t.daemon = True
-        t.start()
-
-        self._logger.debug("After Slack RTM client start")
-
-    def stop_rtm_client(self):
-        self._logger.debug("Stopping Slack RTM client")
-        self.rtm_keep_running = False
-
-        if self.slack_rtm_v2:
-            try:
-                self.slack_rtm_v2.stop()
-            except Exception as e:
-                self._logger.exception(
-                    "Failed to stop Slack RTM (v2) client: " + str(e)
-                )
 
     web_api_keep_running = False
     web_api_running = False
@@ -2067,298 +1972,6 @@ class OctoslackPlugin(
         self.bot_channels = None
         self.bot_conversations_map = {}
         self.last_conversations_ts = {}
-
-    def execute_rtm_loop_v1(self, slackAPIToken):
-        try:
-            ping_interval = 30
-
-            self._logger.debug("Starting Slack RTM (v1) wait loop")
-
-            slack_rtm_v1 = None
-            connection_attempt = 0
-            next_ping = 0
-
-            repeat_error_count = 0
-
-            while self.rtm_keep_running:
-                while slack_rtm_v1 == None or not slack_rtm_v1.server.connected:
-                    try:
-                        ##Reset read error count if we're reconnecting
-                        repeat_error_count = 0
-
-                        ##Roll over the counter to keep delay calculations under control
-                        if connection_attempt > 100:
-                            connection_attempt = 0
-
-                        self._logger.debug(
-                            "Attempting to connect Slack RTM (v1) API (iteration="
-                            + str(connection_attempt)
-                            + ")"
-                        )
-
-                        wait_delay = self.get_rtm_reconnect_delay(connection_attempt)
-
-                        if wait_delay > 0:
-                            self._logger.debug(
-                                "Sleeping for "
-                                + str(wait_delay)
-                                + " seconds before attempting Slack RTM (v1) connection"
-                            )
-                            time.sleep(wait_delay)
-
-                        slackAPIConnection = Slacker(
-                            slackAPIToken, timeout=SLACKER_TIMEOUT
-                        )
-
-                        auth_rsp = slackAPIConnection.auth.test()
-                        self._logger.debug(
-                            "Slack RTM (v1) API Key auth test response: "
-                            + json.dumps(auth_rsp.body)
-                        )
-
-                        if auth_rsp.successful == None or auth_rsp.successful == False:
-                            self._logger.error(
-                                "Slack RTM (v1) API Key auth test failed: "
-                                + json.dumps(auth_rsp.body)
-                            )
-                            connection_attempt += 1
-                            continue
-
-                        self.bot_user_id = auth_rsp.body["user_id"]
-                        self._logger.debug(
-                            "Slack RTM (v1) Bot user id: " + self.bot_user_id
-                        )
-
-                        ##Slack's client doesn't expose the underlying websocket/socket
-                        ##so we unfortunately need to rely on Python's GC to handle
-                        ##the socket disconnect
-                        slack_rtm_v1 = SlackClient(slackAPIToken)
-                        if slack_rtm_v1.rtm_connect(with_team_state=False):
-                            self._logger.debug(
-                                "Successfully reconnected via Slack RTM (v1) API"
-                            )
-                            connection_attempt = 0
-                            next_ping = time.time() + ping_interval
-                        else:
-                            self._logger.error(
-                                "Failed to reconnect via Slack RTM (v1) API"
-                            )
-                            connection_attempt += 1
-                    except Exception as e:
-                        self._logger.error(
-                            "Slack RTM (v1) API connection error (Exception): " + str(e)
-                        )
-                        connection_attempt += 1
-
-                try:
-                    if next_ping > 0 and time.time() >= next_ping:
-                        ping_rsp = slack_rtm_v1.server.ping()
-                        next_ping = time.time() + ping_interval
-
-                    read_msgs = slack_rtm_v1.rtm_read()
-                    if read_msgs:
-                        for msg in read_msgs:
-                            try:
-                                self._logger.debug(
-                                    "Slack RTM (v1) Message: " + str(msg)
-                                )
-
-                                if (
-                                    msg.get("type") != "message"
-                                    or msg.get("text") == None
-                                ):
-                                    continue
-
-                                if not "ts" in msg or not "user" in msg:
-                                    continue
-
-                                msg_text = msg.get("text", "")
-                                if len(msg_text.strip()) == 0:
-                                    continue
-
-                                msg_user = msg.get("user")
-                                msg_channel = msg.get("channel")
-                                msg_ts = msg.get("ts")
-
-                                self._logger.debug(
-                                    "Received Slack RTM (v1) Message - Text: "
-                                    + str(msg_text)
-                                    + ", User: "
-                                    + str(msg_user)
-                                    + ", Channel: "
-                                    + str(msg_channel)
-                                    + ", TS: "
-                                    + str(msg_ts)
-                                )
-
-                                self.process_rtm_message(
-                                    slackAPIToken,
-                                    msg_text,
-                                    msg_user,
-                                    msg_channel,
-                                    msg_ts,
-                                )
-
-                                ##Reset error counter if we've successfully processed a message
-                                repeat_error_count = 0
-                            except Exception as e:
-                                self._logger.error(
-                                    "Slack RTM (v1) message processing error: "
-                                    + str(e),
-                                    exc_info=e,
-                                )
-                    else:
-                        time.sleep(0.5)
-                except WebSocketConnectionClosedException as ce:
-                    self._logger.error(
-                        "Slack RTM (v1) API read error (WebSocketConnectionClosedException): "
-                        + str(ce),
-                        exc_info=ce,
-                    )
-                    time.sleep(1)
-                    slack_rtm_v1 = None
-                except Exception as e:
-                    error_str = str(e)
-
-                    self._logger.error(
-                        "Slack RTM (v1) API read error (Exception): " + error_str
-                    )
-
-                    ##Ovserved errors on windows (WebSocketConnectionClosedException was not thrown)
-                    ##HTTPSConnectionPool(host='slack.com', port=443): Max retries exceeded with url: /api/rtm.start (Caused by NewConnectionError('<urllib3.connection.VerifiedHTTPSConnection object at 0x000000000A6FB278>: Failed to establish a new connection: [Errno 11001] getaddrinfo failed',))
-                    ##[Errno 10054] An existing connection was forcibly closed by the remote host
-
-                    if (
-                        "Max retries exceeded" in error_str
-                        or "NewConnectionError" in error_str
-                        or "Errno 10054" in error_str
-                        or "Errno 11001" in error_str
-                        or "forcibly closed" in error_str
-                    ):
-                        self._logger.error(
-                            "Slack RTM (v1) API experienced a fatal connection error. Resetting connection."
-                        )
-                        slack_rtm_v1 = None
-
-                    time.sleep(1)
-                    repeat_error_count += 1
-
-                    if repeat_error_count >= 100:
-                        self._logger.error(
-                            "Slack RTM (v1) API experienced 100 back to back read errors. Resetting connection."
-                        )
-                        slack_rtm_v1 = None
-
-            self._logger.debug("Finished Slack RTM (v1) read loop")
-        except Exception as e:
-            self._logger.exception("Error in Slack RTM read loop, Error: " + str(e))
-
-    def get_rtm_reconnect_delay(self, iteration):
-        max_delay = 1800  ##30 minutes
-
-        try:
-            delay = (2 ** iteration) * 5
-            if delay <= 0 or delay > max_delay:
-                return max_delay
-
-            return delay
-        except Exception as e:
-            self._logger.exception(
-                "Slack RTM reconnect delay calculation error (iteration="
-                + str(iteration)
-                + "), Error: "
-                + str(e)
-            )
-            return max_delay
-
-    def nonop_add_signal_handler(self, sig, callback, *args):
-        return
-
-    def execute_rtm_loop_v2(self, slackAPIToken):
-        try:
-            self._logger.debug("Starting Slack RTM (v2) wait loop")
-
-            slackAPIConnection = Slacker(slackAPIToken, timeout=SLACKER_TIMEOUT)
-
-            auth_rsp = slackAPIConnection.auth.test()
-            self._logger.debug(
-                "Slack RTM (v2) API Key auth test response: "
-                + json.dumps(auth_rsp.body)
-            )
-
-            if auth_rsp.successful == None or auth_rsp.successful == False:
-                self._logger.error(
-                    "Slack RTM (v2) API Key auth test failed: "
-                    + json.dumps(auth_rsp.body)
-                )
-                self._logger.warn(
-                    "Initial Slack RTM (v2) authentication failed but RTM client will still be started should the issue be resolved"
-                )
-            else:
-                self.bot_user_id = auth_rsp.body["user_id"]
-                self._logger.debug("Slack RTM (v2) Bot user id: " + self.bot_user_id)
-
-            loop = asyncio.new_event_loop()
-            self._logger.debug("Slack RTM (v2) event loop: " + str(loop))
-
-            # asyncsio doesn't like running outside the main thread.
-            # it's impossible to start an event loop on the main thread
-            # via a plugin so I needed to patch the obvious bit that fails.
-            # add_signal_handler serves to detect the service is being stopped
-            # and will stop the event loop. This plugin hangles that
-            # logic internally so while not ideal, we can 'disable it'
-            funcType = type(loop.add_signal_handler)
-            loop.add_signal_handler = funcType(self.nonop_add_signal_handler, loop)
-
-            asyncio.set_event_loop(loop)
-
-            self.slack_rtm_v2 = slack.RTMClient(
-                token=slackAPIToken, ping_interval=30, loop=loop
-            )
-            self.slack_rtm_v2.start()
-
-        except Exception as e:
-            self._logger.exception(
-                "Error in Slack RTM (v2) read loop, Error: " + str(e)
-            )
-
-    def process_rtm_v2_message(self, **payload):
-        self._logger.debug("Slack RTM (v2) Message: " + str(payload))
-        if payload == None or "data" not in payload or payload["data"] == None:
-            self._logger.debug("Ignoring Slack RTM (v2) Message")
-            return
-
-        if "client_msg_id" not in payload["data"] or "text" not in payload["data"]:
-            self._logger.debug("Ignoring Slack RTM (v2) Message")
-            return
-
-        slackAPIToken = payload["rtm_client"].token
-
-        data = payload["data"]
-
-        if not "ts" in data or not "user" in data:
-            return
-
-        msg_text = data["text"]
-        if not msg_text or len(msg_text.strip()) == 0:
-            return
-
-        msg_user = data["user"]
-        msg_channel = data["channel"]
-        msg_ts = data["ts"]
-
-        self._logger.debug(
-            "Received Slack RTM (v2) Message - Text: "
-            + msg_text
-            + ", User: "
-            + msg_user
-            + ", Channel: "
-            + msg_channel
-            + ", TS: "
-            + str(msg_ts)
-        )
-
-        self.process_rtm_message(slackAPIToken, msg_text, msg_user, msg_channel, msg_ts)
 
     bot_channels = None
     bot_conversations_map = {}
@@ -3811,53 +3424,10 @@ class OctoslackPlugin(
                 "postMessage - Channels: " + channels + ", JSON: " + attachments_json
             )
 
-            slack_as_user = True
-            slack_icon_url = None
-            slack_icon_emoji = None
-            slack_username = None
-
-            if self._settings.get(["slack_apitoken_config"], merged=True).get(
-                "classic_bot"
-            ):
-                slack_identity_config = self._settings.get(
-                    ["slack_identity"], merged=True
-                )
-                slack_as_user = slack_identity_config["existing_user"]
-
-                if not slack_as_user:
-                    if (
-                        "icon_url" in slack_identity_config
-                        and len(slack_identity_config["icon_url"].strip()) > 0
-                    ):
-                        slack_icon_url = slack_identity_config["icon_url"].strip()
-                    if (
-                        not self.mattermost_mode()
-                        and "icon_emoji" in slack_identity_config
-                        and len(slack_identity_config["icon_emoji"].strip()) > 0
-                    ):
-                        slack_icon_emoji = slack_identity_config["icon_emoji"].strip()
-                    if (
-                        "username" in slack_identity_config
-                        and slack_identity_config["username"]
-                        and len(slack_identity_config["username"].strip()) > 0
-                    ):
-                        slack_username = slack_identity_config["username"].strip()
-
             allow_empty_channel = connection_method == "WEBHOOK"
 
             if len(channels) == 0:
                 self._logger.debug("No channels configured")
-
-            self._logger.debug(
-                "postMessage - username="
-                + str(slack_username)
-                + ", as_user="
-                + str(slack_as_user)
-                + ", icon_url="
-                + str(slack_icon_url)
-                + ", icon_emoji="
-                + str(slack_icon_emoji)
-            )
 
             for channel in channels.split(","):
                 channel = channel.strip()
@@ -3888,24 +3458,12 @@ class OctoslackPlugin(
                                 )
                             else:
                                 apiRsp = slackAPIConnection.chat.post_message(
-                                    channel,
-                                    text="",
-                                    username=slack_username,
-                                    as_user=slack_as_user,
-                                    attachments=attachments_json,
-                                    icon_url=slack_icon_url,
-                                    icon_emoji=slack_icon_emoji,
+                                    channel, text="", attachments=attachments_json
                                 )
                                 self._bot_progress_last_req = apiRsp
                         else:
                             apiRsp = slackAPIConnection.chat.post_message(
-                                channel,
-                                text="",
-                                username=slack_username,
-                                as_user=slack_as_user,
-                                attachments=attachments_json,
-                                icon_url=slack_icon_url,
-                                icon_emoji=slack_icon_emoji,
+                                channel, text="", attachments=attachments_json
                             )
                         self._logger.debug(
                             "Slack API message send response: " + apiRsp.raw
@@ -3978,19 +3536,6 @@ class OctoslackPlugin(
                 elif not slackWebHookUrl == None and len(slackWebHookUrl) > 0:
                     slack_msg = {}
                     slack_msg["channel"] = channel
-
-                    if not slack_as_user == None:
-                        slack_msg["as_user"] = slack_as_user
-                    if not slack_icon_url == None and len(slack_icon_url.strip()) > 0:
-                        slack_msg["icon_url"] = slack_icon_url.strip()
-                    if (
-                        not slack_icon_emoji == None
-                        and len(slack_icon_emoji.strip()) > 0
-                    ):
-                        slack_msg["icon_emoji"] = slack_icon_emoji.strip()
-                    if not slack_username == None and len(slack_username.strip()) > 0:
-                        slack_msg["username"] = slack_username.strip()
-
                     slack_msg["attachments"] = attachments
                     self._logger.debug(
                         "Slack WebHook postMessage json: " + json.dumps(slack_msg)
