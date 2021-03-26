@@ -2940,6 +2940,7 @@ class OctoslackPlugin(
         command_rsp.put(error_msg)
 
     def get_mattermost_thumbnail(self):
+        # Mattermost has limitation of 16383 characters for whole webhook, so the image size is reduced
         NEW_SIZE = (240, 160)
         QUALITY = 50
         SIZETARGET = 5500
@@ -2959,7 +2960,7 @@ class OctoslackPlugin(
             SIZE = len(b64_string)
             QUALITY -= 1
 
-        return '![cam](data:image/jpg;base64,' + b64_string + ')', None
+        return '![snapshot](data:image/jpg;base64,' + b64_string + ')', None
 
     def send_slack_message(
         self,
