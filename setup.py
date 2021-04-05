@@ -38,7 +38,6 @@ plugin_license = "MIT"
 
 # Any additional requirements besides OctoPrint should be listed here
 plugin_requires = [
-    "slacker",
     "tinys3",
     "imgurpython",
     "netifaces",
