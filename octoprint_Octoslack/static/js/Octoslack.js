@@ -76,22 +76,13 @@ var Octoslack = {
     applySlackUploadChanges : function() {
         var upload_method = $("#octoslack_upload_method_hidden").val();
 
-        var showProgressUpdateMethod = false;
         var showProgressImageUpdateInterval = false;
 
         if(upload_method == "SLACK") {
-            showProgressUpdateMethod = true;
             showProgressImageUpdateInterval = true;
         }
 
-        var progress_update_method_div = $("#octoslack_progress_update_method");
         var progress_image_update_interval_div = $("#octoslack_progress_image_update_interval");
-
-        if(showProgressUpdateMethod) {
-            progress_update_method_div.attr("class", "octoprint_config_row");
-        } else {
-            progress_update_method_div.attr("class", "octoslack_hidden");
-        }
 
         if(showProgressImageUpdateInterval) {
             progress_image_update_interval_div.attr("class", "octoprint_config_row");
@@ -204,6 +195,8 @@ var Octoslack = {
 	var matrixUploadOption = $("#octoslackMatrixUploadMethod");
 	var discordUploadOption = $("#octoslackDiscordUploadMethod");
 
+        var progress_update_method_div = $("#octoslack_progress_update_method");
+
         apiTokenGroup.attr("class", "octoslack_hidden");
         webhookGroup.attr("class", "octoslack_hidden");
 
@@ -214,11 +207,14 @@ var Octoslack = {
         matrixUploadOption.attr("class", "octoslack_hidden"); 
         discordUploadOption.attr("class", "octoslack_hidden"); 
 
+	progress_update_method_div.attr("class", "octoslack_hidden");
+
         switch (new_type) {
             case "APITOKEN":
                 slack_config_section.attr("class", "octoslack_visible");
                 apiTokenGroup.attr("class", "octoslack_visible");
                 slackUploadOption.attr("class", "octoslack_visible");
+	        progress_update_method_div.attr("class", "octoprint_config_row");
                 break;
            case "WEBHOOK":
                 slack_config_section.attr("class", "octoslack_visible");
