@@ -4,7 +4,6 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 from octoprint.util.version import get_octoprint_version_string
 from tempfile import mkstemp
 from datetime import timedelta
-from slacker import Slacker, IncomingWebhook
 from imgurpython import ImgurClient
 from imgurpython.helpers.error import ImgurClientError, ImgurClientRateLimitError
 from pushbullet import Pushbullet
@@ -44,15 +43,21 @@ import pymsteams
 from six import unichr
 from six.moves import zip
 
+SlackClient_Exists = False
+WebClient_Exists = False
+
 try:
     # Python2
     from slackclient import SlackClient
+
+    SlackClient_Exists = True
 except ImportError:
     # Python3
-    import slack
-    import asyncio
+    from slack_sdk import WebClient
 
-SLACKER_TIMEOUT = 60
+    WebClient_Exists = True
+
+SLACK_TIMEOUT = 60
 COMMAND_EXECUTION_WAIT = 10
 
 
@@ -1910,6 +1915,24 @@ class OctoslackPlugin(
 
         return "Fqdn detection error"
 
+    def getSlackClient(self, slackAPIToken):
+        slack_client2 = None
+        slack_client3 = None
+
+        if SlackClient_Exists:
+            # Python2
+            slack_client2 = SlackClient(slackAPIToken)
+        elif WebClient_Exists:
+            # Python3
+            slack_client3 = WebClient(slackAPIToken, timeout=SLACK_TIMEOUT)
+
+        if not slack_client2 and not slack_client3:
+            self._logger.exception(
+                "Could not locate Slack library for Slack client creation"
+            )
+
+        return (slack_client2, slack_client3)
+
     def start_bot_listener(self):
         self._logger.debug("Entering Slack Web API client init logic")
         t = threading.Thread(target=self.start_web_api_client, args=())
@@ -1983,22 +2006,23 @@ class OctoslackPlugin(
         try:
             self._logger.debug("Starting Slack Web API loop")
 
-            slackAPIConnection = Slacker(slackAPIToken, timeout=SLACKER_TIMEOUT)
+            slack_client2, slack_client3 = self.getSlackClient(slackAPIToken)
 
-            auth_rsp = slackAPIConnection.auth.test()
-            self._logger.debug(
-                "Slack Web API auth test response: " + json.dumps(auth_rsp.body)
-            )
+            auth_rsp = None
+            if slack_client2:
+                auth_rsp = slack_client2.api_call("auth.test", timeout=SLACK_TIMEOUT)
+            elif slack_client3:
+                auth_rsp = slack_client3.auth_test()
 
-            if auth_rsp.successful == None or auth_rsp.successful == False:
-                self._logger.error(
-                    "Slack Web API auth test failed: " + json.dumps(auth_rsp.body)
-                )
+            self._logger.debug("Slack Web API auth test response: " + str(auth_rsp))
+
+            if auth_rsp.get("ok", False) == False:
+                self._logger.error("Slack Web API auth test failed: " + str(auth_rsp))
                 self._logger.warn(
                     "Initial Slack Web API authentication failed. Exiting channel history loop. Save a new key to reattempt the connection."
                 )
             else:
-                self.bot_user_id = auth_rsp.body["user_id"]
+                self.bot_user_id = auth_rsp.get("user_id")
                 self._logger.debug("Slack Web API Bot user id: " + self.bot_user_id)
 
             self._logger.debug("Starting Slack Web API event loop")
@@ -2057,13 +2081,13 @@ class OctoslackPlugin(
 
             conversation_id = self.bot_conversations_map[channel]
 
-            slack = Slacker(slackAPIToken)
+            slack_client2, slack_client3 = self.getSlackClient(slackAPIToken)
 
             last_ts = None
             has_more = True
             next_cursor = None
 
-            ##TOD also add a max duration
+            ##TODO also add a max duration
             while has_more:
                 if conversation_id in self.last_conversations_ts:
                     if next_cursor == None:
@@ -2082,19 +2106,18 @@ class OctoslackPlugin(
                     #    + ", Limit: "
                     #    + str(limit)
                     # )
-                    ##Python3 only
-                    # history_rsp = slack.conversations.history(
-                    #    conversation_id, oldest=last_ts, limit=limit
-                    # )
-                    ##Needed for Python2 support
-                    history_rsp = slack.users.get(
-                        "conversations.history",
-                        params={
-                            "channel": conversation_id,
-                            "oldest": last_ts,
-                            "limit": limit,
-                        },
-                    )
+                    if slack_client2:
+                        history_rsp = slack_client2.api_call(
+                            "conversations.history",
+                            timeout=SLACK_TIMEOUT,
+                            channel=conversation_id,
+                            oldest=last_ts,
+                            limit=limit,
+                        )
+                    elif slack_client3:
+                        history_rsp = slack_client3.conversations_history(
+                            channel=conversation_id, oldest=last_ts, limit=limit
+                        )
                 else:
                     # self._logger.debug(
                     #    "Slack Web API - Channel history call - ConversationID: "
@@ -2106,24 +2129,26 @@ class OctoslackPlugin(
                     #    + ", Limit: "
                     #    + str(limit)
                     # )
-                    ##Python3 only
-                    # history_rsp = slack.conversations.history(
-                    #    conversation_id, oldest=last_ts, cursor=next_cursor, limit=limit
-                    # )
-                    ##Needed for Python2 support
-                    history_rsp = slack.users.get(
-                        "conversations.history",
-                        params={
-                            "channel": conversation_id,
-                            "cursor": next_cursor,
-                            "oldest": last_ts,
-                            "limit": limit,
-                        },
-                    )
+                    if slack_client2:
+                        history_rsp = slack_client2.api_call(
+                            "conversations.history",
+                            timeout=SLACK_TIMEOUT,
+                            channel=conversation_id,
+                            cursor=next_cursor,
+                            oldest=last_ts,
+                            limit=limit,
+                        )
+                    elif slack_client3:
+                        history_rsp = slack_client3.conversations_history(
+                            channel=conversation_id,
+                            oldest=last_ts,
+                            cursor=next_cursor,
+                            limit=limit,
+                        )
                 has_more = False
                 next_cursor = None
 
-                if not history_rsp.successful:
+                if history_rsp.get("ok", False) == False:
                     if conversation_id in self.last_conversations_ts:
                         self._logger.debug(
                             "Slack Web API - Removing cached conversation ID TS for "
@@ -2132,17 +2157,18 @@ class OctoslackPlugin(
                         )
                         del self.last_conversations_ts[conversation_id]
                 else:
-                    messages = history_rsp.body["messages"]
+                    messages = history_rsp.get("messages")
                     msg_count = len(messages)
                     if msg_count < 0:
                         return
 
                     if not limit == 1:
-                        has_more = history_rsp.body["has_more"]
-                        if "response_metadata" in history_rsp.body:
-                            response_metadata = history_rsp.body["response_metadata"]
-                            if "next_cursor" in response_metadata:
-                                next_cursor = response_metadata["next_cursor"].strip()
+                        has_more = history_rsp.get("has_more")
+                        response_metadata = history_rsp.get("response_metadata")
+                        if response_metadata:
+                            next_cursor = response_metadata.get("next_cursor")
+                            if next_cursor:
+                                next_cursor = next_cursor.strip()
                                 if len(next_cursor) == 0:
                                     next_cursor = None
 
@@ -2152,21 +2178,21 @@ class OctoslackPlugin(
                         i -= 1
 
                         try:
-                            if not "ts" in message or not "user" in message:
+                            msg_user = message.get("user")
+                            msg_ts = message.get("ts")
+                            if not msg_ts or not msg_user:
                                 continue
 
-                            msg_user = message["user"]
-                            msg_ts = message["ts"]
                             self.last_conversations_ts[conversation_id] = msg_ts
 
-                            if not "type" in message:
+                            msg_type = message.get("type")
+                            if not msg_type:
                                 continue
 
-                            msg_type = message["type"]
                             if not msg_type == "message":
                                 continue
 
-                            msg_text = message["text"]
+                            msg_text = message.get("text")
 
                             if limit == 1:
                                 # Only need the latest ts
@@ -2236,17 +2262,21 @@ class OctoslackPlugin(
         try:
             # self._logger.debug("Slack Web API - Updating bot conversations list...")
 
-            slack = Slacker(slackAPIToken)
+            slack_client2, slack_client3 = self.getSlackClient(slackAPIToken)
 
-            rsp = slack.users.get(
-                "users.conversations",
-                params={
-                    "exclude_archived": True,
-                    "types": "public_channel, private_channel",
-                },
-            )
+            if slack_client2:
+                rsp = slack_client2.api_call(
+                    "users.conversations",
+                    timeout=SLACK_TIMEOUT,
+                    exclude_archived=True,
+                    types="public_channel, private_channel",
+                )
+            elif slack_client3:
+                rsp = slack_client3.users_conversations(
+                    exclude_archived=True, types="public_channel, private_channel"
+                )
 
-            if not rsp.successful:
+            if rsp.get("ok", False) == False:
                 self._logger.error(
                     "Slack Web API - Failed to retrieve bot's channel list"
                 )
@@ -2256,21 +2286,20 @@ class OctoslackPlugin(
             new_channels = []
             new_last_conversations_ts = {}
 
-            for channel in rsp.body["channels"]:
-                is_channel = "is_channel" in channel and channel["is_channel"]
-                is_group = (
-                    "is_group" in channel and channel["is_group"]
-                )  # private channel
+            for channel in rsp.get("channels"):
+                is_channel = channel.get("is_channel", False)
+                # private channel
+                is_group = channel.get("is_group", False)
 
                 if (
                     (not is_channel and not is_group)
-                    or "name" not in channel
-                    or "id" not in channel
+                    or channel.get("name", False) == False
+                    or channel.get("id", False) == False
                 ):
                     continue
 
-                channel_name = channel["name"]
-                channel_id = channel["id"]
+                channel_name = channel.get("name")
+                channel_id = channel.get("id")
 
                 # self._logger.debug(
                 #    "Slack Web API - Channel name: "
@@ -2589,22 +2618,32 @@ class OctoslackPlugin(
             if len(userid) == 0:
                 return
 
-            slackAPIConnection = Slacker(slackAPIToken, timeout=SLACKER_TIMEOUT)
+            slack_client2, slack_client3 = self.getSlackClient(slackAPIToken)
 
             self._logger.debug(
                 "Retrieving username for Slack message - User ID: " + userid
             )
 
-            user_info_rsp = slackAPIConnection.users.info(userid)
+            if slack_client2:
+                user_info_rsp = slack_client2.api_call(
+                    "users.info",
+                    timeout=SLACK_TIMEOUT,
+                    user=userid,
+                    include_locale=False,
+                )
+            elif slack_client3:
+                user_info_rsp = slack_client3.users_info(
+                    user=userid, include_locale=False
+                )
 
             self._logger.debug(
                 "Slack user info rsp for User ID: "
                 + userid
                 + ", Response: "
-                + json.dumps(user_info_rsp.body)
+                + str(user_info_rsp)
             )
 
-            return user_info_rsp.body["user"]["name"]
+            return user_info_rsp.get("user").get("name")
         except Exception as e:
             self._logger.exception(
                 "Error retrieving username for Slack message - User ID: "
@@ -2623,7 +2662,7 @@ class OctoslackPlugin(
             if len(reaction) == 0:
                 return
 
-            slackAPIConnection = Slacker(slackAPIToken, timeout=SLACKER_TIMEOUT)
+            slack_client2, slack_client3 = self.getSlackClient(slackAPIToken)
 
             self._logger.debug(
                 "Sending Slack reaction - Channel: "
@@ -2637,15 +2676,33 @@ class OctoslackPlugin(
             )
 
             if remove:
-                reaction_rsp = slackAPIConnection.reactions.remove(
-                    channel=channel, timestamp=timestamp, name=reaction
-                )
+                if slack_client2:
+                    reaction_rsp = slack_client2.api_call(
+                        "reactions.remove",
+                        timeout=SLACK_TIMEOUT,
+                        channel=channel,
+                        timestamp=timestamp,
+                        name=reaction,
+                    )
+                elif slack_client3:
+                    reaction_rsp = slack_client3.reactions_remove(
+                        channel=channel, timestamp=timestamp, name=reaction
+                    )
             else:
-                reaction_rsp = slackAPIConnection.reactions.add(
-                    channel=channel, timestamp=timestamp, name=reaction
-                )
+                if slack_client2:
+                    reaction_rsp = slack_client2.api_call(
+                        "reactions.add",
+                        timeout=SLACK_TIMEOUT,
+                        channel=channel,
+                        timestamp=timestamp,
+                        name=reaction,
+                    )
+                elif slack_client3:
+                    reaction_rsp = slack_client3.reactions_add(
+                        channel=channel, timestamp=timestamp, name=reaction
+                    )
 
-            if reaction_rsp.successful == None or reaction_rsp.successful == False:
+            if reaction_rsp.get("ok", False) == False:
                 self._logger.debug(
                     "Slack send reaction failed - Channel: "
                     + channel
@@ -2655,7 +2712,7 @@ class OctoslackPlugin(
                     + reaction
                     + ", Remove: "
                     + str(remove)
-                    + json.dumps(reaction_rsp.body)
+                    + str(reaction_rsp)
                 )
             else:
                 self._logger.debug(
@@ -3439,8 +3496,8 @@ class OctoslackPlugin(
 
                 if not slackAPIToken == None and len(slackAPIToken) > 0:
                     try:
-                        slackAPIConnection = Slacker(
-                            slackAPIToken, timeout=SLACKER_TIMEOUT
+                        slack_client2, slack_client3 = self.getSlackClient(
+                            slackAPIToken
                         )
 
                         ##Applies to both standard Progress events as well as '@bot status' Slack commands
@@ -3450,29 +3507,64 @@ class OctoslackPlugin(
                                 and progress_update_method == "INPLACE"
                                 and connection_method == "APITOKEN"
                             ):
-                                apiRsp = slackAPIConnection.chat.update(
-                                    self._bot_progress_last_req.body["channel"],
-                                    ts=self._bot_progress_last_req.body["ts"],
-                                    text="",
-                                    attachments=attachments_json,
-                                )
+                                if slack_client2:
+                                    api_rsp = slack_client2.api_call(
+                                        "chat.update",
+                                        timeout=SLACK_TIMEOUT,
+                                        channel=self._bot_progress_last_req.get(
+                                            "channel"
+                                        ),
+                                        ts=self._bot_progress_last_req.get("ts"),
+                                        text="",
+                                        attachments=attachments_json,
+                                    )
+                                elif slack_client3:
+                                    api_rsp = slack_client3.chat_update(
+                                        channel=self._bot_progress_last_req.get(
+                                            "channel"
+                                        ),
+                                        ts=self._bot_progress_last_req.get("ts"),
+                                        text="",
+                                        attachments=attachments_json,
+                                    )
                             else:
-                                apiRsp = slackAPIConnection.chat.post_message(
-                                    channel,
+                                if slack_client2:
+                                    api_rsp = slack_client2.api_call(
+                                        "chat.postMessage",
+                                        timeout=SLACK_TIMEOUT,
+                                        channel=channel,
+                                        as_user=True,
+                                        text="",
+                                        attachments=attachments_json,
+                                    )
+                                elif slack_client3:
+                                    api_rsp = slack_client3.chat_postMessage(
+                                        channel=channel,
+                                        as_user=True,
+                                        text="",
+                                        attachments=attachments_json,
+                                    )
+
+                                self._bot_progress_last_req = api_rsp
+                        else:
+                            if slack_client2:
+                                api_rsp = slack_client2.api_call(
+                                    "chat.postMessage",
+                                    timeout=SLACK_TIMEOUT,
+                                    channel=channel,
                                     as_user=True,
                                     text="",
                                     attachments=attachments_json,
                                 )
-                                self._bot_progress_last_req = apiRsp
-                        else:
-                            apiRsp = slackAPIConnection.chat.post_message(
-                                channel,
-                                as_user=True,
-                                text="",
-                                attachments=attachments_json,
-                            )
+                            elif slack_client3:
+                                api_rsp = slack_client3.chat_postMessage(
+                                    channel=channel,
+                                    as_user=True,
+                                    text="",
+                                    attachments=attachments_json,
+                                )
                         self._logger.debug(
-                            "Slack API message send response: " + apiRsp.raw
+                            "Slack API message send response: " + str(api_rsp)
                         )
                         if snapshot_msg:
                             ##TODO Doing the upload here makes it difficult to append any error messages to the slack message.
@@ -3522,11 +3614,25 @@ class OctoslackPlugin(
 
                                         fid = None
                                         try:
-                                            fid = prev_snapshot.body["file"]["id"]
+                                            fid = prev_snapshot.get("file").get("id")
                                             self._logger.debug(
                                                 "Deleting Slack snapshot: " + str(fid)
                                             )
-                                            slackAPIConnection.files.delete(fid)
+                                            if slack_client2:
+                                                delete_rsp = slack_client2.api_call(
+                                                    "files.delete",
+                                                    timeout=SLACK_TIMEOUT,
+                                                    file=fid,
+                                                )
+                                            elif slack_client3:
+                                                delete_rsp = slack_client3.files_delete(
+                                                    file=fid
+                                                )
+
+                                            self._logger.debug(
+                                                "Slack delete Snapshot response: "
+                                                + str(delete_rsp)
+                                            )
                                         except Exception as e:
                                             self._logger.error(
                                                 "Slack snapshot deletion error. Slack FileID: {}, Error: {}".format(
@@ -3548,15 +3654,19 @@ class OctoslackPlugin(
                     )
 
                     try:
-                        webHook = IncomingWebhook(slackWebHookUrl)
-                        webHookRsp = webHook.post(slack_msg)
-                        self._logger.debug(
-                            "Slack WebHook postMessage response: " + webHookRsp.text
+                        webhook_rsp = requests.post(
+                            slackWebHookUrl,
+                            data=json.dumps(slack_msg),
+                            headers={"Content-Type": "application/json"},
                         )
 
-                        if not webHookRsp.ok:
+                        self._logger.debug(
+                            "Slack WebHook postMessage response: " + webhook_rsp.text
+                        )
+
+                        if webhook_rsp.status_code != 200:
                             self._logger.error(
-                                "Slack WebHook message send failed: " + webHookRsp.text
+                                "Slack WebHook message send failed: " + webhook_rsp.text
                             )
                     except Exception as e:
                         self._logger.exception(
@@ -4623,7 +4733,8 @@ class OctoslackPlugin(
 
         slack_upload_start = time.time()
 
-        slackAPIConnection = None
+        slack_client2 = None
+        slack_client3 = None
 
         slackAPIToken = self._settings.get(["slack_apitoken_config"], merged=True).get(
             "api_token"
@@ -4633,35 +4744,52 @@ class OctoslackPlugin(
             slackAPIToken = slackAPIToken.strip()
 
         if slackAPIToken and len(slackAPIToken) > 0:
-            slackAPIConnection = Slacker(slackAPIToken, timeout=SLACKER_TIMEOUT)
+            slack_client2, slack_client3 = self.getSlackClient(slackAPIToken)
 
-        if slackAPIConnection == None:
+        if slack_client2 == None and slack_client3 == None:
             self._logger.exception("Slack API connection unavailable")
             error_msgs.append("Slack API connection unavailable")
             return None, error_msgs, None
 
         file_size = os.stat(local_file_path).st_size
 
-        # str() needd to works around Slacker isinsance(lcoal_file_path, str) bug
-        asset_msg = {
-            "file_": str(local_file_path),
-            "filename": dest_filename,
-            "title": file_description,
-            "channels": channels,
-        }
-
         self._logger.debug(
-            "Uploading file (" + str(file_size) + ") to Slack: " + str(asset_msg)
+            "Uploading file to Slack - Local file: "
+            + str(local_file_path)
+            + ", Remote filename: "
+            + str(file_description)
+            + ", Size: "
+            + str(file_size)
+            + ", Channels: "
+            + str(channels)
         )
-        resp = slackAPIConnection.files.upload(**asset_msg)
-        self._logger.debug("Slack API upload snapshot response: " + resp.raw)
+
+        upload_rsp = None
+        with open(local_file_path, "rb") as file_to_upload:
+            if slack_client2:
+                upload_rsp = slack_client2.api_call(
+                    "files.upload",
+                    channels=channels,
+                    filename=dest_filename,
+                    title=file_description,
+                    file=file_to_upload,
+                )
+            elif slack_client3:
+                upload_rsp = slack_client3.files_upload(
+                    channels=channels,
+                    filename=dest_filename,
+                    title=file_description,
+                    file=file_to_upload,
+                )
+
+        self._logger.debug("Slack API upload snapshot response: " + str(upload_rsp))
 
         error_msg = None
 
-        if resp == None:
+        if upload_rsp == None:
             error_msg = "Unknown"
-        elif not resp.successful:
-            error_msg = resp.error
+        elif upload_rsp.get("ok", False) == False:
+            error = upload_rsp.get("error", "Unknown error")
 
         if not error_msg == None:
             self._logger.exception(
@@ -4678,8 +4806,8 @@ class OctoslackPlugin(
             + str(round(slack_upload_elapsed, 2))
             + " seconds"
         )
-        download_url = resp.body.get("file").get("url_private_download")
-        return download_url, error_msgs, resp
+        download_url = upload_rsp.get("file").get("url_private_download")
+        return download_url, error_msgs, upload_rsp
 
     def retrieve_snapshot_images(self):
         urls = []
