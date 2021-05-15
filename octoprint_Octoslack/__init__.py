@@ -2166,9 +2166,9 @@ class OctoslackPlugin(
                         has_more = history_rsp.get("has_more")
                         response_metadata = history_rsp.get("response_metadata")
                         if response_metadata:
-                            next_cursor = response_metadata["next_cursor"].strip()
+                            next_cursor = response_metadata.get("next_cursor")
                             if next_cursor:
-                                next_cursor = response_metadata["next_cursor"].strip()
+                                next_cursor = next_cursor.strip()
                                 if len(next_cursor) == 0:
                                     next_cursor = None
 
@@ -2178,21 +2178,21 @@ class OctoslackPlugin(
                         i -= 1
 
                         try:
-                            msg_user = message["user"]
-                            msg_ts = message["ts"]
+                            msg_user = message.get("user")
+                            msg_ts = message.get("ts")
                             if not msg_ts or not msg_user:
                                 continue
 
                             self.last_conversations_ts[conversation_id] = msg_ts
 
-                            msg_type = message["type"]
+                            msg_type = message.get("type")
                             if not msg_type:
                                 continue
 
                             if not msg_type == "message":
                                 continue
 
-                            msg_text = message["text"]
+                            msg_text = message.get("text")
 
                             if limit == 1:
                                 # Only need the latest ts
@@ -2287,20 +2287,19 @@ class OctoslackPlugin(
             new_last_conversations_ts = {}
 
             for channel in rsp.get("channels"):
-                is_channel = "is_channel" in channel and channel["is_channel"]
-                is_group = (
-                    "is_group" in channel and channel["is_group"]
-                )  # private channel
+                is_channel = channel.get("is_channel", False)
+                # private channel
+                is_group = channel.get("is_group", False)
 
                 if (
                     (not is_channel and not is_group)
-                    or "name" not in channel
-                    or "id" not in channel
+                    or channel.get("name", False) == False
+                    or channel.get("id", False) == False
                 ):
                     continue
 
-                channel_name = channel["name"]
-                channel_id = channel["id"]
+                channel_name = channel.get("name")
+                channel_id = channel.get("id")
 
                 # self._logger.debug(
                 #    "Slack Web API - Channel name: "
