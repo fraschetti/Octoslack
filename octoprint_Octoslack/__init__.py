@@ -6,6 +6,7 @@ from tempfile import mkstemp
 from datetime import timedelta
 from imgurpython import ImgurClient
 from imgurpython.helpers.error import ImgurClientError, ImgurClientRateLimitError
+from io import BytesIO
 from pushbullet import Pushbullet
 from pushover_complete import PushoverAPI
 from rocketchat.api import RocketChatAPI
@@ -2801,7 +2802,7 @@ class OctoslackPlugin(
         ##returns bold formatting str, key/value separator (often used when bold can't be used), newline
         connection_method = self.connection_method()
         if connection_method == "WEBHOOK" and self.mattermost_mode():
-            return "**", "**", " ", "\n"
+            return "**", "**", " ", "\n\n"
         elif connection_method == "WEBHOOK" or connection_method == "APITOKEN":
             return "*", "*", " ", "\n"
         elif connection_method == "PUSHOVER":
@@ -2994,6 +2995,29 @@ class OctoslackPlugin(
         command_rsp.put(return_code)
         command_rsp.put(command_output)
         command_rsp.put(error_msg)
+
+    def get_mattermost_thumbnail(self):
+        # Mattermost has limitation of 16383 characters for whole webhook, so the image size is reduced
+        NEW_SIZE = (240, 160)
+        QUALITY = 50
+        SIZETARGET = 5500
+
+        local_file_path, error_msgs = self.retrieve_snapshot_images()
+        if local_file_path == None:
+            return None, error_msgs
+
+        image = Image.open(local_file_path)
+        image.thumbnail(NEW_SIZE, Image.ANTIALIAS)
+
+        SIZE = SIZETARGET + 1
+        while SIZE >= SIZETARGET and QUALITY >= 1 :
+            buffered = BytesIO()
+            image.save(buffered, format="JPEG", quality = QUALITY)
+            b64_string = base64.b64encode(buffered.getvalue()).decode('utf-8')
+            SIZE = len(b64_string)
+            QUALITY -= 1
+
+        return '![snapshot](data:image/jpg;base64,' + b64_string + ')', None
 
     def send_slack_message(
         self,
@@ -3470,6 +3494,12 @@ class OctoslackPlugin(
                                 else:
                                     text += newline + " - "
                                 text += timelapse_error
+
+            if connection_method == "WEBHOOK" and self.mattermost_mode() and includeSnapshot and snapshot_upload_method == "NONE":
+                thumbnail, error_msg = self.get_mattermost_thumbnail()
+                if not error_msg == None:
+                    self._logger.debug(error_msg)
+                text += newline + thumbnail
 
             if not text == None and len(text) > 0:
                 attachment["text"] = text
