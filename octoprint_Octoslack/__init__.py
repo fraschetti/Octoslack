@@ -3901,7 +3901,25 @@ class OctoslackPlugin(
                         ##def send_message(self, message, room_id, **kwargs):
                         ##def upload_file(self, room_id, description, file, message, mime_type='text/plain', **kwargs):
 
-                        rc_room_id = rc.get_room_id(channel)
+                        rc_room_id = None
+                        if channel[0] == "#":
+                            public_channels = rc.get_public_rooms()
+                            for public_channel in public_channels:
+                                if channel[1:] == public_channel["name"]:
+                                    rc_room_id = public_channel["id"]
+                                    break
+                            if rc_room_id is None:
+                                raise Exception("No matching channel found for " + channel[1:])
+                        elif channel[0] == '@':
+                            private_dms = rc.get_users()
+                            for private_dm in private_dms:
+                                if channel[1:] == private_dm["username"]:
+                                    rc_room_id = private_dm["id"]
+                                    break
+                            if rc_room_id is None:
+                                raise Exception("No matching user found for " + channel[1:])
+                        else: #backwards compatibility with no # or @ to post to groups
+                            rc_room_id = rc.get_room_id(channel) #groups
                         self._logger.debug(
                             "Rocket.Chat channel: "
                             + channel
