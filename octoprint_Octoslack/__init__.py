@@ -62,6 +62,7 @@ COMMAND_EXECUTION_WAIT = 10
 
 VCGENPATHS = ["/opt/vc/bin/vcgencmd", "/usr/bin/vcgencmd", "/bin/vcgencmd"]
 
+
 class OctoslackPlugin(
     octoprint.plugin.SettingsPlugin,
     octoprint.plugin.AssetPlugin,
@@ -775,7 +776,6 @@ class OctoslackPlugin(
     def on_after_startup(self):
         self.start_bot_listener()
         self.update_gcode_sent_listeners()
-
 
         self.start_heartbeat_timer()
 
@@ -1868,18 +1868,24 @@ class OctoslackPlugin(
             notification_thread.daemon = True
             notification_thread.start()
 
-
     found_vcgen_path = None
+
     def find_vcgencmd_path(self):
         if not self.found_vcgen_path == None:
-            self._logger.debug("vcgencmd path already found. Skipping location lookup step")
+            self._logger.debug(
+                "vcgencmd path already found. Skipping location lookup step"
+            )
             return
 
         if not self._settings.get(["include_raspi_temp"], merged=True):
-            self._logger.info("Skipping vcgencmd location lookup step as the RasberryPi temp option is currently disabled")
+            self._logger.info(
+                "Skipping vcgencmd location lookup step as the RasberryPi temp option is currently disabled"
+            )
             return
 
-        self._logger.info("Attempting to detect vcgencmd path for querying RasberryPi temperature information")
+        self._logger.info(
+            "Attempting to detect vcgencmd path for querying RasberryPi temperature information"
+        )
         for path in VCGENPATHS:
             self._logger.info("Searching path for vcgencmd: " + path)
             try:
@@ -1893,11 +1899,15 @@ class OctoslackPlugin(
                 )
 
         if self.found_vcgen_path == None:
-            self._logger.warn("Attempting to detect vcgencmd path for querying RasberryPi temperature information")
+            self._logger.warn(
+                "Attempting to detect vcgencmd path for querying RasberryPi temperature information"
+            )
 
     def query_raspi_temp(self):
         if self.found_vcgen_path == None:
-            self._logger.debug("vcgencmd not previously found. RasberryPi temp cannot be queried")
+            self._logger.debug(
+                "vcgencmd not previously found. RasberryPi temp cannot be queried"
+            )
             return None
 
         rpi_tmp = None
@@ -1914,7 +1924,9 @@ class OctoslackPlugin(
         except Exception as e:
             if type(e) == ValueError:
                 self._logger.error(
-                    "Unable to execute Raspberry Pi command (" + self.found_vcgen_path + "): "
+                    "Unable to execute Raspberry Pi command ("
+                    + self.found_vcgen_path
+                    + "): "
                     + e.message
                 )
             else:
