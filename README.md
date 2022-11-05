@@ -1,8 +1,8 @@
 # Octoslack #
-An OctoPrint plugin for monitoring your printer and prints via Slack, Mattermost, Pushbullet, Pushover, Rocket.Chat, Discord, Riot/Matrix, or Microsoft Teams
+An OctoPrint plugin for monitoring your printer and prints via Slack, Mattermost, Pushbullet, Pushover, Rocket.Chat, Discord, Element/Matrix, or Microsoft Teams
 
 # Features #
- - Support for Slack, Mattermost, Pushbullet, Pushover, Rocket.Chat, Discord, Matrix based platforms (e.g. Riot), & Microsoft Teams
+ - Support for Slack, Mattermost, Pushbullet, Pushover, Rocket.Chat, Discord, Matrix based platforms (e.g. Element), & Microsoft Teams
  - Monitor both print status as well as printer connectivity status
  - Respond to Slack commands to check print status or cancel/pause/resume a print
      - Each command can be individually enabled/disbaled or flagged as restricted which limits the command(s) to specific users
@@ -81,10 +81,10 @@ An OctoPrint plugin for monitoring your printer and prints via Slack, Mattermost
 > ### Print Started ###
 > ![Rocket.Chat - Print started example](/screenshots/Octoslack-RocketChat-PrintStarted.png?raw=true)
 
-# Matrix/Riot.im Example #
+# Matrix/Element Example #
 
 > ### Print Started ###
-> ![Matrix/Riot.im - Print started example](/screenshots/Octoslack-Matrix-PrintStarted.png?raw=true)
+> ![Matrix/Element - Print started example](/screenshots/Octoslack-Matrix-PrintStarted.png?raw=true)
 
 # G-code event & System command Example #
 
