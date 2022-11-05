@@ -60,6 +60,7 @@ except ImportError:
 SLACK_TIMEOUT = 60
 COMMAND_EXECUTION_WAIT = 10
 
+VCGENPATHS = ["/opt/vc/bin/vcgencmd", "/usr/bin/vcgencmd", "/bin/vcgencmd"]
 
 class OctoslackPlugin(
     octoprint.plugin.SettingsPlugin,
@@ -722,11 +723,15 @@ class OctoslackPlugin(
             self.update_progress_timer()
             self.update_heartbeat_timer()
             self.update_gcode_sent_listeners()
+            self.find_vcgencmd_path()
             self._slack_next_progress_snapshot_time = 0
         except Exception as e:
             self._logger.exception(
                 "Error executing post-save actions, Error: " + str(e)
             )
+
+    def on_settings_initialized(self):
+        self.find_vcgencmd_path()
 
     ##~ TemplatePlugin mixin
 
@@ -770,6 +775,7 @@ class OctoslackPlugin(
     def on_after_startup(self):
         self.start_bot_listener()
         self.update_gcode_sent_listeners()
+
 
         self.start_heartbeat_timer()
 
@@ -1622,27 +1628,7 @@ class OctoslackPlugin(
             ["include_raspi_temp"], merged=True
         ):
 
-            rpi_tmp = None
-            try:
-                p = run("/opt/vc/bin/vcgencmd measure_temp", stdout=Capture())
-                rpi_tmp = p.stdout.text
-
-                if not rpi_tmp == None and rpi_tmp.startswith("temp="):
-                    rpi_tmp = rpi_tmp.strip()
-                    rpi_tmp = rpi_tmp[5:-2]
-                else:
-                    rpi_tmp = None
-            except Exception as e:
-                if type(e) == ValueError:
-                    self._logger.error(
-                        "Unable to execute Raspberry Pi command (/opt/vc/bin/vcgencmd): "
-                        + e.message
-                    )
-                else:
-                    self._logger.exception(
-                        "Error reading Raspberry Pi temp - Error: " + str(e)
-                    )
-
+            rpi_tmp = self.query_raspi_temp()
             if not rpi_tmp == None:
                 if len(footer) > 0:
                     footer += ", "
@@ -1881,6 +1867,62 @@ class OctoslackPlugin(
             )
             notification_thread.daemon = True
             notification_thread.start()
+
+
+    found_vcgen_path = None
+    def find_vcgencmd_path(self):
+        if not self.found_vcgen_path == None:
+            self._logger.debug("vcgencmd path already found. Skipping location lookup step")
+            return
+
+        if not self._settings.get(["include_raspi_temp"], merged=True):
+            self._logger.info("Skipping vcgencmd location lookup step as the RasberryPi temp option is currently disabled")
+            return
+
+        self._logger.info("Attempting to detect vcgencmd path for querying RasberryPi temperature information")
+        for path in VCGENPATHS:
+            self._logger.info("Searching path for vcgencmd: " + path)
+            try:
+                if os.path.exists(path):
+                    self._logger.info("Found vcgencmd at: " + path)
+                    self.found_vcgen_path = path
+                    break
+            except Exception as e:
+                self._logger.exception(
+                    "Error validating potential vcgencmd path - Error: " + str(e)
+                )
+
+        if self.found_vcgen_path == None:
+            self._logger.warn("Attempting to detect vcgencmd path for querying RasberryPi temperature information")
+
+    def query_raspi_temp(self):
+        if self.found_vcgen_path == None:
+            self._logger.debug("vcgencmd not previously found. RasberryPi temp cannot be queried")
+            return None
+
+        rpi_tmp = None
+
+        try:
+            p = run(self.found_vcgen_path + " measure_temp", stdout=Capture())
+            rpi_tmp = p.stdout.text
+
+            if not rpi_tmp == None and rpi_tmp.startswith("temp="):
+                rpi_tmp = rpi_tmp.strip()
+                rpi_tmp = rpi_tmp[5:-2]
+            else:
+                rpi_tmp = None
+        except Exception as e:
+            if type(e) == ValueError:
+                self._logger.error(
+                    "Unable to execute Raspberry Pi command (" + self.found_vcgen_path + "): "
+                    + e.message
+                )
+            else:
+                self._logger.exception(
+                    "Error reading Raspberry Pi temp - Error: " + str(e)
+                )
+
+        return rpi_tmp
 
     # Currrently only querying IPv4 although the library supports IPv6 as well
     def get_ips(self):
