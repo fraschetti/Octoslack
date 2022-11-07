@@ -11,6 +11,7 @@ from pushover_complete import PushoverAPI
 from rocketchat.api import RocketChatAPI
 from matrix_client.client import MatrixClient
 from matrix_client.client import Room as MatrixRoom
+import emoji
 from PIL import Image
 from octoprint.util import RepeatedTimer
 from minio import Minio
@@ -4058,6 +4059,7 @@ class OctoslackPlugin(
 
                         matrix_msg = matrix_msg + "</blockquote><br/>"
 
+                        matrix_msg = emoji.emojize(matrix_msg, use_aliases=True)
                         self._logger.debug("Matrix msg: " + matrix_msg)
 
                         matrix_room = MatrixRoom(matrix, channel)

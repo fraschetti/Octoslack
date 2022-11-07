@@ -50,6 +50,7 @@ plugin_requires = [
     "matrix_client",
     "discord-webhook",
     "pymsteams",
+    "emoji>=0.6.0",
     "six>=1.9.0",
 ]
 
