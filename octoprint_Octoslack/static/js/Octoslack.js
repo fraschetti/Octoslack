@@ -846,6 +846,7 @@ var Octoslack = {
             }
 
             //Message
+	    eventHtml.push("        <br/>");
 	    eventHtml.push("        <div class='octoprint_config_row'>");
 	    eventHtml.push("            <textarea class='octoslack_width_auto' rows='2' cols='60' id='octoslack_event_" + internalName + "_message' "
                 + (useDataBind ? "data-bind='value: settings.plugins.Octoslack.supported_events." + internalName + ".Message'" : "")
@@ -854,6 +855,8 @@ var Octoslack = {
                 + "</textarea>");
 	    eventHtml.push("            <div class='octoslack_label octoslack_action_label'>Message</div>");
 	    eventHtml.push("        </div>");
+	    eventHtml.push("        <br/>");
+	    eventHtml.push("        <br/>");
 
 	    //Fallback
 	    eventHtml.push("        <div class='octoprint_config_row' octoslack_msg_fallback>");
@@ -863,6 +866,8 @@ var Octoslack = {
 	        + (customFallback.trim().length > 0 ? this.escapeHtml(customFallback.trim()) : "")
 	        + "</textarea>");
 	    eventHtml.push("            <div class='octoslack_label octoslack_action_label'>Fallback</div>");
+	    eventHtml.push("        <br/>");
+	    eventHtml.push("        <br/>");
 	    eventHtml.push("        </div>");
 
             //PushoverSound

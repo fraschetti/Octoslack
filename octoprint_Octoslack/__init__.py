@@ -28,7 +28,8 @@ import os.path
 import uuid
 import time
 import datetime
-import tinys3
+import boto3
+from botocore.client import Config as S3Config
 import humanize
 import time
 import threading
@@ -143,8 +144,7 @@ class OctoslackPlugin(
                 "AWSAccessKey": "",
                 "AWSsecretKey": "",
                 "s3Bucket": "",
-                "file_expire_days": -1,
-                "URLStyle": "PATH",
+                "s3Endpoint": "s3.amazonaws.com",
             },
             "minio_config": {
                 "AccessKey": "",
@@ -707,7 +707,9 @@ class OctoslackPlugin(
         if current == None:
             return
 
-        if current < 2:  ##All 1 --> 2 changes
+        settingsChanged = False
+
+        if current < 2:  ## < Ver2 bot username changes
             existing_alt_username = self._settings.get(
                 ["slack_identity"], merged=True
             ).get("username")
@@ -716,6 +718,11 @@ class OctoslackPlugin(
                     ["slack_apitoken_config", "alternate_bot_username"],
                     existing_alt_username,
                 )
+                settingsChanged = True
+
+        if settingsChanged:
+            self._logger.info("Saving migrated settings")
+            self._settings.save()
 
     def on_settings_save(self, data):
         try:
@@ -4382,25 +4389,48 @@ class OctoslackPlugin(
                         awsAccessKey = s3_config["AWSAccessKey"]
                         awsSecretKey = s3_config["AWSsecretKey"]
                         s3Bucket = s3_config["s3Bucket"]
-                        fileExpireDays = int(s3_config["file_expire_days"])
-                        s3URLStyle = s3_config["URLStyle"]
-
-                        s3_expiration = timedelta(days=fileExpireDays)
+                        s3Endpoint = s3_config["s3Endpoint"]
 
                         imgData = open(local_file_path, "rb")
 
                         uploadFilename = dest_filename
 
-                        s3conn = tinys3.Connection(awsAccessKey, awsSecretKey, tls=True)
-                        s3UploadRsp = s3conn.upload(
+                        self._logger.debug("S3 endpoint: " + str(s3Endpoint))
+                        self._logger.debug("S3 bucket: " + str(s3Bucket))
+
+                        s3_endpoint_url = "https://" + s3Endpoint
+                        self._logger.debug("S3 endpoint URL: " + s3_endpoint_url)
+
+                        s3_virtual_endpoint_url = (
+                            "https://" + s3Bucket + "." + s3Endpoint
+                        )
+                        self._logger.debug(
+                            "S3 virtual endpoint URL: " + s3_endpoint_url
+                        )
+
+                        ##ENABLE TO DEBUG BOTO3
+                        # boto3.set_stream_logger('')
+
+                        s3_config = S3Config(s3={"addressing_style": "virtual"})
+
+                        s3_client = boto3.resource(
+                            "s3",
+                            config=s3_config,
+                            endpoint_url=s3_endpoint_url,
+                            aws_access_key_id=awsAccessKey,
+                            aws_secret_access_key=awsSecretKey,
+                        )
+
+                        s3_bucket = s3_client.Bucket(s3Bucket)
+
+                        s3UploadRsp = s3_bucket.upload_file(
+                            local_file_path,
                             uploadFilename,
-                            imgData,
-                            s3Bucket,
-                            headers={"x-amz-acl": "public-read"},
-                            expires=s3_expiration,
+                            ExtraArgs={"ACL": "public-read"},
                         )
 
                         self._logger.debug("S3 upload response: " + str(s3UploadRsp))
+
                         s3_upload_elapsed = time.time() - s3_upload_start
                         self._logger.debug(
                             "Uploaded asset to S3 in "
@@ -4408,24 +4438,11 @@ class OctoslackPlugin(
                             + " seconds"
                         )
 
-                        if s3URLStyle and s3URLStyle == "VIRTUAL":
-                            return (
-                                "https://"
-                                + s3Bucket
-                                + ".s3.amazonaws.com/"
-                                + uploadFilename,
-                                error_msgs,
-                                None,
-                            )
-                        else:
-                            return (
-                                "https://s3.amazonaws.com/"
-                                + s3Bucket
-                                + "/"
-                                + uploadFilename,
-                                error_msgs,
-                                None,
-                            )
+                        return (
+                            s3_virtual_endpoint_url + "/" + uploadFilename,
+                            error_msgs,
+                            None,
+                        )
                     except Exception as e:
                         self._logger.exception(
                             "Failed to upload asset to S3: " + str(e)

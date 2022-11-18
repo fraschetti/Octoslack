@@ -21,7 +21,7 @@
 }
 .octoslack_small_config_group {
     border: 2px solid #a1a1a1;
-    padding: 10px;
+    padding: 10px 10px 20px 10px;
     border-radius: 10px;
 }
 .octoprint_config_row {

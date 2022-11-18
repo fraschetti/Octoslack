@@ -654,37 +654,23 @@
 	    <br/>
 	    <br/>
             <div class="octoprint_config_row">
-                <span class="octoslack_label">AWS S3 Retention</span>
-                <input type="number" id="octoslack_s3_retention" step="any" min="1" class="input-mini text-right" data-bind="value: settings.plugins.Octoslack.s3_config.file_expire_days">
-                <span class="octoslack_valign">days</span>
-	        <br/>
-	        <small class="muted">How long should AWS keep uploaded snapshots before they are automatically deleted</small>
+                <span class="octoslack_label">AWS Endpoint</span>
+                <input type="text" name="octoslack_s3_endpoint" id="octoslack_s3_endpoint" class="octoslack_width_auto" size="40" data-bind="value: settings.plugins.Octoslack.s3_config.s3Endpoint">
             </div>
-	    <br/>
-	    <div class="octoprint_config_row">
-                <span class="octoslack_label">AWS S3 URL Style</span>
-	        <select class="octoslack_select" data-bind="value: settings.plugins.Octoslack.s3_config.URLStyle">
-                    <option value="VIRTUAL">Virtual hosted style</option>
-                    <option value="PATH">Path style</option>
-                </select>
-	        <br/>
-	        <small class="muted">
-                    Most users won't need to change this setting as most S3 buckets fully support both URL styles. Some S3 buckets may require a specific style depending on the bucket name, region, or other attribute. Additional S3 bucket access details can be found <a href="https://docs.aws.amazon.com/AmazonS3/latest/dev/UsingBucket.html#access-bucket-intro" target="_blank">here</a>
-                </small>
-	        <p class="octoslack_indented">
-	            <small class="muted">
-	    	        <strong>Virtual hosted style</strong> - https://<strong><i>bucket</i></strong>.s3.amazonaws.com
-	                <br/>
-	                <strong>Path style</strong> - http://s3.amazonaws.com/<strong><i>bucket</i></strong>
-	            </small>
-	        </p>
-	    </div>
+	    <small class="muted">
+                The Amazon S3 endpoint for the region where your bucket is located. The list of S3 endpoints can be found <a href="https://docs.aws.amazon.com/general/latest/gr/s3.html" target="_blank">here</a>
+                <br/>
+                <br/>
+                NOTE: Amazon S3 is deprecating 'path-style' URLs in favor of 'virtual-style' URLs. This plugin now exclusively uses the 'virtual-style' for generating URLs. If you suspect an issue here, you may need to look into your S3 bucket in context of this change. You can read more about the S3 URL styles and the deprecation topic <a href="https://aws.amazon.com/blogs/aws/amazon-s3-path-deprecation-plan-the-rest-of-the-story/" target="_blank">here</a>
+                <br/>
+                NOTE: We now use the official Amazon library for interfacing with S3. Providing the wrong AWS Endpoint will still technically work as this library has internal magic to determine you've provided the wrong endpoint and to retry again against the correct endpoint but at the cost of additional calls to AWS and ultimately, time. Please make a best effort to choose the appropriate endpoint for your Amazon S3 bucket
+            </small>
         </div>
         <div id="octolack_minio_group" class="octoslack_hidden">
             <br/>
             <div class="octoprint_config_row">
                 <span class="octoslack_label">Endpoint</span>
-                <input type="text" class="octoslack_width_auto" size="30" data-bind="value: settings.plugins.Octoslack.minio_config.Endpoint">
+                <input type="text" class="octoslack_width_auto" size="40" data-bind="value: settings.plugins.Octoslack.minio_config.Endpoint">
             </div>
             <div class="octoprint_config_row">
                 <span class="octoslack_label">Access Key</span>
