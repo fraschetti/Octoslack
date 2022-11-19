@@ -1929,16 +1929,25 @@ class OctoslackPlugin(
             else:
                 rpi_tmp = None
         except Exception as e:
+            error_msg = None
+
+            if hasattr(e, "message"):
+                error_msg = e.message
+            elif hasattr(e, "msg"):
+                error_msg = e.msg
+            else:
+                error_msg = str(e)
+
             if type(e) == ValueError:
                 self._logger.error(
                     "Unable to execute Raspberry Pi command ("
                     + self.found_vcgen_path
                     + "): "
-                    + e.message
+                    + str(error_msg)
                 )
             else:
                 self._logger.exception(
-                    "Error reading Raspberry Pi temp - Error: " + str(e)
+                    "Error reading Raspberry Pi temp - Error: " + str(error_msg)
                 )
 
         return rpi_tmp
@@ -3045,11 +3054,13 @@ class OctoslackPlugin(
         except Exception as e:
             if hasattr(e, "message"):
                 error_msg = e.message
+            elif hasattr(e, "msg"):
+                error_msg = e.msg
             else:
                 error_msg = str(e)
 
             self._logger.error(
-                "Failed to execute command for event: " + event + " - " + error_msg
+                "Failed to execute command for event: " + event + " - " + str(error_msg)
             )
 
         command_rsp.put(return_code)
@@ -3394,12 +3405,21 @@ class OctoslackPlugin(
                     elif len(text) > 0:
                         text += newline
 
+                    error_msg = None
+
+                    if hasattr(e, "message"):
+                        error_msg = e.message
+                    elif hasattr(e, "msg"):
+                        error_msg = e.msg
+                    else:
+                        error_msg = str(e)
+
                     text += (
                         bold_text_start
                         + "Command execution error"
                         + bold_text_end
                         + name_val_sep
-                        + str(e.message)
+                        + str(error_msg)
                     )
 
             if (
@@ -4768,12 +4788,16 @@ class OctoslackPlugin(
             except Exception as e:
                 self._logger.exception("Asset upload error: %s" % str(e))
 
+                error_msg = None
+
                 if hasattr(e, "message"):
                     error_msg = e.message
+                elif hasattr(e, "msg"):
+                    error_msg = e.msg
                 else:
                     error_msg = str(e)
 
-                error_msgs.append(error_msg)
+                error_msgs.append(str(error_msg))
             finally:
                 if local_file_path:
                     self._logger.debug(
@@ -5415,11 +5439,16 @@ class OctoslackPlugin(
                 "Error generating combined snapshot image: %s" % (str(e))
             )
 
+            error_msg = None
+
             if hasattr(e, "message"):
                 error_msg = e.message
+            elif hasattr(e, "msg"):
+                error_msg = e.msg
             else:
                 error_msg = str(e)
-            return None, error_msg
+
+            return None, str(error_msg)
 
     active_gcode_events = []
     active_gcode_received_events = []
@@ -5524,8 +5553,12 @@ class OctoslackPlugin(
                         "GcodeEvent", None, {"cmd": cmd}, False, False, gcode_event
                     )
         except Exception as e:
+            error_msg = None
+
             if hasattr(e, "message"):
                 error_msg = e.message
+            elif hasattr(e, "msg"):
+                error_msg = e.msg
             else:
                 error_msg = str(e)
 
@@ -5533,7 +5566,7 @@ class OctoslackPlugin(
                 "Error attempting to match sent G-code command to the configured events, G-code: "
                 + gcode
                 + ", Error: "
-                + error_msg
+                + str(error_msg)
             )
 
         return (cmd,)
@@ -5572,8 +5605,12 @@ class OctoslackPlugin(
                         "GcodeEvent", None, {"cmd": line}, False, False, gcode_event
                     )
         except Exception as e:
+            error_msg = None
+
             if hasattr(e, "message"):
                 error_msg = e.message
+            elif hasattr(e, "msg"):
+                error_msg = e.msg
             else:
                 error_msg = str(e)
 
@@ -5581,7 +5618,7 @@ class OctoslackPlugin(
                 "Error attempting to match received G-code command to the configured events, G-code: "
                 + line
                 + ", Error: "
-                + error_msg
+                + str(error_msg)
             )
 
         return line
