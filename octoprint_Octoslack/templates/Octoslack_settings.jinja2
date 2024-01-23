@@ -358,18 +358,23 @@
             <br/>
             <div class="octoprint_config_row">
                 <span class="octoslack_label">App Token</span>
-                <input type="text" class="octoslack_width_auto" id="octoslack_pushover_app_token" size="60" placeholder="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" data-bind="value: settings.plugins.Octoslack.pushover_config.app_token">
-		</br>
-		<small class="muted">
+                <input type="text" class="octoslack_width_auto" id="octoslack_pushover_app_token" size="60" placeholder="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" data-bind="value: settings.plugins.Octoslack.pushover_config.app_token"></br>
+                <small class="muted">
                     Register your Pushover application <a href="https://pushover.net/apps/build" target="_blank">here</a>. Your App Token will be available on the next screen
                 </small>
             </div>
             <div class="octoprint_config_row">
                 <span class="octoslack_label">User/Group Key</span>
-                <input type="text" class="octoslack_width_auto" id="octoslack_pushover_user_key" size="60" placeholder="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" data-bind="value: settings.plugins.Octoslack.pushover_config.user_key">
-		</br>
-		<small class="muted">
+                <input type="text" class="octoslack_width_auto" id="octoslack_pushover_user_key" size="60" placeholder="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" data-bind="value: settings.plugins.Octoslack.pushover_config.user_key"></br>
+                <small class="muted">
                     The message recipient's user or group key. Your user key is available on your <a href="https://pushover.net/" target="_blank">Pushover dashboard</a> page
+                </small>
+            </div>
+            <div class="octoprint_config_row">
+                <span class="octoslack_label">Device</span>
+                <input type="text" class="octoslack_width_auto" id="octoslack_pushover_device" size="60" placeholder="" data-bind="value: settings.plugins.Octoslack.pushover_config.device"></br>
+                <small class="muted">
+                    The device where the message will be sent to. Leave empty to send to all your devices.
                 </small>
             </div>
         </div>
@@ -545,7 +550,7 @@
             <span class="octoslack_valign octoslack_action_label"
               onclick="$('#octoslackSnapshotUploadMethod_pushover').trigger('click')">Pushover</span>
            <br/>
-           <small class="muted">Snapshot images will hosted by <a href="https://pushover.net/" target="_blank">Pushover</a>. Only Pushover hosted snapshots will render in the message. All other hosting options will simply be included as a URL in the message body</small>
+           <small class="muted">Snapshot images will be hosted by <a href="https://pushover.net/" target="_blank">Pushover</a>. Only Pushover hosted snapshots will render in the message. All other hosting options will simply be included as a URL in the message body</small>
         </div>
         <div id="octoslackRocketChatUploadMethod">
             <input type="radio" name="octoslackSnapshotUploadMethod"

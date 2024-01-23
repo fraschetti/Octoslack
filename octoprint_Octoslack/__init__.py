@@ -110,7 +110,7 @@ class OctoslackPlugin(
             "slack_rtm_authorized_users": "",
             "channel": "",
             "pushbullet_config": {"access_token": "", "channel": ""},
-            "pushover_config": {"app_token": "", "user_key": ""},
+            "pushover_config": {"app_token": "", "user_key": "", "device": ""},
             "rocketchat_config": {
                 "server_url": "",
                 "username": "",
@@ -3816,6 +3816,10 @@ class OctoslackPlugin(
                         )
                         return
 
+                    pushoverDevice = self._settings.get(
+                        ["pushover_config"], merged=True
+                    ).get("device")
+
                     po_title = None
                     po_body = None
                     pb_image_url = None
@@ -3883,6 +3887,7 @@ class OctoslackPlugin(
                             user=pushoverUserKey,
                             title=po_title,
                             message=po_body,
+                            device=pushoverDevice,
                             url=pb_image_url,
                             url_title=pb_image_title,
                             image=pb_image_local_path,
